@@ -2,6 +2,8 @@
 
 require "adwaita"
 
+require_relative "i18n"
+
 module Constrict
   # Ported from upstream's src/gtk/shortcuts-dialog.blp.
   #
@@ -13,9 +15,12 @@ module Constrict
   # Adw.ShortcutsDialog is a final GType, so this composes one rather than
   # subclassing it: #build returns the dialog, and #present forwards to it.
   class ShortcutsDialog
+    include I18n
+
     # Upstream marks these titles with the "shortcut window" gettext context,
     # so translators can shorten them for this dialog without affecting the
-    # same words elsewhere.
+    # same words elsewhere. They are stored untranslated and passed through
+    # C_() as the dialog is built.
     SECTIONS = {
       "Video Management" => [
         ["Open", "win.open"],
@@ -32,8 +37,8 @@ module Constrict
 
     def build
       dialog.tap do |shortcuts|
-        shortcuts.title = "Keyboard Shortcuts"
-
+        # The title is left alone: upstream's blueprint does not set one
+        # either, so libadwaita's own translated default stands.
         SECTIONS.each { |title, items| shortcuts.add(section(title, items)) }
       end
     end
@@ -46,7 +51,7 @@ module Constrict
 
       def section(title, items)
         Adwaita::ShortcutsSection.new.tap do |section|
-          section.title = title
+          section.title = C_("shortcut window", title)
           items.each { |label, action| section.add(item(label, action)) }
         end
       end
@@ -55,7 +60,7 @@ module Constrict
       # keyword arguments fail — so the accelerator is passed empty and the
       # action name set afterwards, which is what upstream's blueprint does.
       def item(label, action)
-        Adwaita::ShortcutsItem.new(label, "").tap do |item|
+        Adwaita::ShortcutsItem.new(C_("shortcut window", label), "").tap do |item|
           item.action_name = action
         end
       end

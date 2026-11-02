@@ -2,6 +2,7 @@
 
 require "adwaita"
 
+require_relative "i18n"
 require_relative "shared"
 
 module Constrict
@@ -16,6 +17,8 @@ module Constrict
   # compression is running, and even unlocked a single row cannot be dragged
   # and the first and last rows cannot be moved past the ends of the list.
   class SourcesListBox < Gtk::ListBox
+    include I18n
+
     type_register
 
     attr_reader :locked
@@ -37,7 +40,7 @@ module Constrict
     def add_videos_button
       @add_videos_button ||= Adwaita::ButtonRow.new.tap do |row|
         row.start_icon_name = "list-add-symbolic"
-        row.title = "Add Vide_os…"
+        row.title = _("Add Vide_os…")
         row.use_underline = true
         row.action_name = "win.open"
       end

@@ -2,6 +2,7 @@
 
 require "adwaita"
 
+require_relative "i18n"
 require_relative "shared"
 
 module Constrict
@@ -13,6 +14,8 @@ module Constrict
   # aiming for, and whether the file it produced came out too large or too
   # small, with an arrow pointing the way it missed.
   class AttemptFailBox < Gtk::Box
+    include I18n
+
     type_register
 
     def initialize(
@@ -69,7 +72,7 @@ module Constrict
     end
 
     def attempt_label
-      @attempt_label ||= Gtk::Label.new("Attempt #{@attempt_no}").tap do |label|
+      @attempt_label ||= Gtk::Label.new(interpolate(_("Attempt {}"), @attempt_no)).tap do |label|
         label.xalign = 0
         label.margin_top = 4
         label.margin_bottom = 6
@@ -125,23 +128,30 @@ module Constrict
       end
 
       def failure_text
-        if too_large?
-          "Compressed file size was too large (#{compressed_size_mb} MiB)"
-        else
-          "Compressed file size was too small (#{compressed_size_mb} MiB)"
-        end
+        interpolate(
+          if too_large?
+            _("Compressed file size was too large ({size}\u202F{unit})")
+          else
+            _("Compressed file size was too small ({size}\u202F{unit})")
+          end,
+          size: compressed_size_mb,
+          unit: _("MiB"),
+        )
       end
 
       # The same bitrate/resolution/audio summary the running attempt shows,
       # without its "Compressing to" lead-in.
       def target_text
-        extra = Shared.res_fps_details(
-          is_hq_audio: @is_hq_audio,
-          vid_height:  @vid_height,
-          vid_fps:     @vid_fps,
+        interpolate(
+          _("{vid_br}\u202F{vid_br_unit} ({extra_details})"),
+          vid_br:        @vid_bitrate / 1000,
+          vid_br_unit:   _("kbps"),
+          extra_details: Shared.res_fps_details(
+            is_hq_audio: @is_hq_audio,
+            vid_height:  @vid_height,
+            vid_fps:     @vid_fps,
+          ),
         )
-
-        "#{@vid_bitrate / 1000} kbps (#{extra})"
       end
   end
 end

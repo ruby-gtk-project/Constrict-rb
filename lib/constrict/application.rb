@@ -3,6 +3,7 @@
 require "gtk4"
 require "adwaita"
 
+require_relative "i18n"
 require_relative "preferences_dialog"
 require_relative "settings"
 require_relative "shortcuts_dialog"
@@ -17,6 +18,8 @@ module Constrict
   # the shortcuts dialog lists. Windows are not singletons — `app.new-window`
   # opens another, carrying the settings the last one was left on.
   class Application
+    include I18n
+
     APP_ID = "org.rubygtkproject.Constrict"
 
     # Upstream reads these from its appdata; the port carries them here.
@@ -28,7 +31,8 @@ module Constrict
     ].freeze
 
     # The sections upstream credits in its about dialog, kept because the code
-    # they credit is in this port too.
+    # they credit is in this port too. The titles are msgids, translated as
+    # the dialog is built.
     ACKNOWLEDGEMENTS = {
       "‘8mb’ repository by"                   => [
         "Matthew Baggett https://github.com/matthewbaggett/",
@@ -94,7 +98,7 @@ module Constrict
     end
 
     # The suffix exported files get when the user has set no custom one.
-    def default_suffix = " (compressed)"
+    def default_suffix = " (#{_("compressed")})"
 
     # The application-level services the windows need. Upstream's windows call
     # these on the GtkApplication they belong to; here they go through the
@@ -194,7 +198,7 @@ module Constrict
 
       def about_dialog
         Adwaita::AboutDialog.new.tap do |dialog|
-          dialog.application_name = "Constrict"
+          dialog.application_name = _("Constrict")
           dialog.application_icon = "video-encoder-symbolic"
           dialog.version = VERSION
           dialog.developer_name = "Wartybix"
@@ -205,7 +209,16 @@ module Constrict
           dialog.issue_url = "https://github.com/ruby-gtk-project/Constrict-rb/issues"
 
           ACKNOWLEDGEMENTS.each do |title, names|
-            dialog.add_acknowledgement_section(title, names)
+            dialog.add_acknowledgement_section(_(title), names)
+          end
+
+          # Upstream passes _('translator-credits') straight in. gettext hands
+          # back the msgid itself where a locale has no translation for it, so
+          # the section is only credited once a translator has claimed it.
+          _("translator-credits").then do |credits|
+            if credits != "translator-credits"
+              dialog.translator_credits = credits
+            end
           end
         end
       end

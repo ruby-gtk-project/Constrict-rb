@@ -2,6 +2,7 @@
 
 require "adwaita"
 
+require_relative "i18n"
 require_relative "shared"
 
 module Constrict
@@ -14,6 +15,8 @@ module Constrict
   # bar and its surrounding text are modelled on Nautilus' progress info
   # widget.
   class CurrentAttemptBox < Gtk::Box
+    include I18n
+
     type_register
 
     # Where the time estimate switches units. Taken, as upstream notes, from
@@ -46,7 +49,7 @@ module Constrict
 
     # Read back by the popover box when it assembles its screen-reader message.
     def attempt_label
-      @attempt_label ||= Gtk::Label.new("Attempt 1").tap do |label|
+      @attempt_label ||= Gtk::Label.new(interpolate(_("Attempt {}"), 1)).tap do |label|
         label.xalign = 0
         label.margin_bottom = 6
         label.add_css_class("heading")
@@ -54,7 +57,7 @@ module Constrict
     end
 
     def target_details_label
-      @target_details_label ||= Gtk::Label.new("Initializing…").tap do |label|
+      @target_details_label ||= Gtk::Label.new(_("Initializing…")).tap do |label|
         label.width_request = 300
         label.margin_bottom = 6
         label.hexpand = true
@@ -75,7 +78,7 @@ module Constrict
     end
 
     def progress_details_label
-      @progress_details_label ||= Gtk::Label.new("0 %").tap do |label|
+      @progress_details_label ||= Gtk::Label.new(percentage_text(0)).tap do |label|
         label.wrap = true
         label.wrap_mode = :word_char
         label.ellipsize = :end
@@ -110,7 +113,7 @@ module Constrict
       daemon:
     )
       Shared.update_ui(daemon) do
-        attempt_label.label = "Attempt #{attempt_no}"
+        attempt_label.label = interpolate(_("Attempt {}"), attempt_no)
         target_details_label.label = target_string(
           vid_bitrate: vid_bitrate,
           is_hq_audio: is_hq_audio,
@@ -133,48 +136,60 @@ module Constrict
     private
 
       def target_string(vid_bitrate:, is_hq_audio:, vid_height:, vid_fps:)
-        extra = Shared.res_fps_details(
-          is_hq_audio: is_hq_audio,
-          vid_height:  vid_height,
-          vid_fps:     vid_fps,
+        interpolate(
+          _("Compressing to {vid_br}\u202F{vid_br_unit} ({extra_details})"),
+          vid_br:        vid_bitrate / 1000,
+          vid_br_unit:   _("kbps"),
+          extra_details: Shared.res_fps_details(
+            is_hq_audio: is_hq_audio,
+            vid_height:  vid_height,
+            vid_fps:     vid_fps,
+          ),
         )
-
-        "Compressing to #{vid_bitrate / 1000} kbps (#{extra})"
       end
 
       def progress_string(fraction, seconds_left)
-        percentage_text = "#{(fraction * 100).round} %"
-
-        if seconds_left.nil?
-          percentage_text
-        elsif seconds_left == -1
-          "#{percentage_text} — Almost done"
-        else
-          "#{percentage_text} — About #{time_left(seconds_left)} left"
+        percentage_text((fraction * 100).round).then do |percentage|
+          if seconds_left.nil?
+            percentage
+          elsif seconds_left == -1
+            interpolate(_("{} — Almost done"), percentage)
+          else
+            interpolate(
+              _("{percentage} — About {time_shown} left"),
+              percentage: percentage,
+              time_shown: time_left(seconds_left),
+            )
+          end
         end
+      end
+
+      def percentage_text(progress_percent)
+        interpolate(_("{}\u202F%"), progress_percent)
       end
 
       def time_left(seconds_left)
         if seconds_left < MINUTE
-          plural(seconds_left, "second", "seconds")
+          seconds(seconds_left)
         elsif seconds_left < HOUR
-          plural(seconds_left / MINUTE, "minute", "minutes")
+          minutes(seconds_left / MINUTE)
         elsif seconds_left < MINUTES_CUTOFF
-          [
-            plural(seconds_left / HOUR, "hour", "hours"),
-            plural((seconds_left / MINUTE) % 60, "minute", "minutes"),
-          ].join(", ")
+          [hours(seconds_left / HOUR), minutes((seconds_left / MINUTE) % 60)].join(", ")
         else
-          plural(seconds_left / HOUR, "hour", "hours")
+          hours(seconds_left / HOUR)
         end
       end
 
-      def plural(count, singular, many)
-        if count == 1
-          "#{count} #{singular}"
-        else
-          "#{count} #{many}"
-        end
+      def seconds(count)
+        interpolate(ngettext("{} second", "{} seconds", count), count)
+      end
+
+      def minutes(count)
+        interpolate(ngettext("{} minute", "{} minutes", count), count)
+      end
+
+      def hours(count)
+        interpolate(ngettext("{} hour", "{} hours", count), count)
       end
   end
 end

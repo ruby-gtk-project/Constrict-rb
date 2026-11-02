@@ -5,6 +5,7 @@ require "adwaita"
 require_relative "attempt_fail_box"
 require_relative "constrict_utils"
 require_relative "enums"
+require_relative "i18n"
 require_relative "progress_pie"
 require_relative "progress_popover_box"
 require_relative "shared"
@@ -22,6 +23,8 @@ module Constrict
   # Upstream's acknowledgement stands: the drag-and-drop reordering is modelled
   # on GNOME Settings' input rows and GNOME Music's song widget.
   class SourcesRow < Adwaita::ActionRow
+    include I18n
+
     type_register
 
     # Below this bitrate a compression is near-certain to fail after wasting
@@ -147,7 +150,7 @@ module Constrict
     def error_icon
       @error_icon ||= Gtk::Button.new.tap do |button|
         button.icon_name = "error-outline-symbolic"
-        button.tooltip_text = "View Error Details"
+        button.tooltip_text = _("View Error Details")
         button.valign = :center
         button.visible = false
         button.action_name = "row.on-error"
@@ -159,7 +162,7 @@ module Constrict
     def video_broken_button
       @video_broken_button ||= Gtk::MenuButton.new.tap do |button|
         button.icon_name = "broken-video-symbolic"
-        button.tooltip_text = "View Error Details"
+        button.tooltip_text = _("View Error Details")
         button.valign = :center
         button.visible = false
         button.add_css_class("error")
@@ -170,7 +173,7 @@ module Constrict
     def broken_popover = @broken_popover ||= Gtk::Popover.new
 
     def broken_label
-      @broken_label ||= popover_label("Cannot load video. It may be missing or corrupted.")
+      @broken_label ||= popover_label(_("Cannot load video. It may be missing or corrupted."))
     end
 
     # Carries both the blocking "target size is too low" error and the
@@ -189,7 +192,7 @@ module Constrict
     def progress_button
       @progress_button ||= Gtk::MenuButton.new.tap do |button|
         button.visible = false
-        button.tooltip_text = "View Compression Progress"
+        button.tooltip_text = _("View Compression Progress")
         button.valign = :center
         button.add_css_class("flat")
       end
@@ -226,7 +229,7 @@ module Constrict
     def complete_button
       @complete_button ||= Gtk::MenuButton.new.tap do |button|
         button.icon_name = "check-plain-symbolic"
-        button.tooltip_text = "More Details"
+        button.tooltip_text = _("More Details")
         button.valign = :center
         button.visible = false
         button.add_css_class("success")
@@ -255,7 +258,7 @@ module Constrict
     def find_file_button
       @find_file_button ||= Gtk::Button.new.tap do |button|
         button.margin_top = 9
-        button.label = "Show File Location"
+        button.label = _("Show File Location")
         button.action_name = "row.find-compressed-file"
       end
     end
@@ -263,7 +266,7 @@ module Constrict
     def menu_button
       @menu_button ||= Gtk::MenuButton.new.tap do |button|
         button.icon_name = "view-more-symbolic"
-        button.tooltip_text = "View More"
+        button.tooltip_text = _("View More")
         button.valign = :center
         button.menu_model = row_actions
         button.add_css_class("flat")
@@ -275,13 +278,13 @@ module Constrict
         menu.append_section(
           nil,
           Gio::Menu.new.tap do |section|
-            section.append("Move _Up", "row.move-up")
-            section.append("Move _Down", "row.move-down")
+            section.append(_("Move _Up"), "row.move-up")
+            section.append(_("Move _Down"), "row.move-down")
           end,
         )
         menu.append_section(
           nil,
-          Gio::Menu.new.tap { |section| section.append("_Remove", "row.remove") },
+          Gio::Menu.new.tap { |section| section.append(_("_Remove"), "row.remove") },
         )
       end
     end
@@ -353,7 +356,7 @@ module Constrict
       Shared.update_ui(daemon) do
         incompatible_button.icon_name = "exclamation-mark-symbolic"
         incompatible_button.css_classes = ["flat", "error"]
-        incompatible_button.tooltip_text = "View Error Details"
+        incompatible_button.tooltip_text = _("View Error Details")
         incompatible_label.label = message
       end
 
@@ -365,7 +368,7 @@ module Constrict
       Shared.update_ui(daemon) do
         incompatible_button.icon_name = "warning-outline-symbolic"
         incompatible_button.css_classes = ["flat", "warning"]
-        incompatible_button.tooltip_text = "More Information"
+        incompatible_button.tooltip_text = _("More Information")
         incompatible_label.label = message
       end
 
@@ -381,7 +384,11 @@ module Constrict
 
     def set_complete(compressed_video_path, compressed_size_mb, daemon)
       Shared.update_ui(daemon) do
-        complete_label.label = "Video compressed to #{compressed_size_mb} MiB."
+        complete_label.label = interpolate(
+          _("Video compressed to {size}\u202F{unit}."),
+          size: compressed_size_mb,
+          unit: _("MiB"),
+        )
         progress_popover.popdown
       end
 
@@ -398,7 +405,11 @@ module Constrict
           set_warning(already_small_enough_message(target_size), daemon)
         elsif video_bitrate < MIN_VIABLE_BITRATE
           set_incompatible(
-            "Target size (#{target_size} MiB) is too low for this file.",
+            interpolate(
+              _("Target size ({size}\u202F{unit}) is too low for this file."),
+              size: target_size,
+              unit: _("MiB"),
+            ),
             daemon,
           )
         else
@@ -541,8 +552,17 @@ module Constrict
 
       def already_small_enough_message(target_size)
         (size / 1024.0 / 1024.0).round(1).then do |size_mb|
-          "Video file size (#{size_mb} MiB) already meets the target size " \
-            "(#{target_size} MiB)."
+          interpolate(
+            _(
+              "Video file size ({original_size}\u202F{unit_original}) " \
+              "already meets the target size " \
+              "({target_size}\u202F{unit_target}).",
+            ),
+            original_size: size_mb,
+            unit_original: _("MiB"),
+            target_size:   target_size,
+            unit_target:   _("MiB"),
+          )
         end
       end
 

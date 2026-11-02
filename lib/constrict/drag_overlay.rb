@@ -2,6 +2,8 @@
 
 require "adwaita"
 
+require_relative "i18n"
+
 module Constrict
   # Ported from upstream's src/drag_overlay.blp and src/drag_overlay.py.
   #
@@ -15,6 +17,8 @@ module Constrict
   # class's own override to put the overlay into the Bin, which is what the
   # bind_call below does.
   class DragOverlay < Adwaita::Bin
+    include I18n
+
     type_register
 
     BIN_CHILD = Adwaita::Bin.instance_method(:child=)
@@ -73,7 +77,7 @@ module Constrict
 
     def status_page
       @status_page ||= Adwaita::StatusPage.new.tap do |page|
-        page.title = "Drop Videos to Import"
+        page.title = _("Drop Videos to Import")
         page.icon_name = "video-x-generic-symbolic"
         page.add_css_class("overlay-status")
       end

@@ -4,6 +4,7 @@ require "open3"
 require "tempfile"
 
 require_relative "enums"
+require_relative "i18n"
 
 module Constrict
   # Raised when ffprobe cannot read a property of a source video.
@@ -66,6 +67,8 @@ module Constrict
     }.freeze
 
     COMPATIBLE_SUBTITLE_CODECS = ["subrip", "webvtt", "ass", "mov_text"].freeze
+
+    extend I18n
 
     module_function
 
@@ -634,7 +637,11 @@ module Constrict
 
       catch(:result) do
         unless File.file?(file_input)
-          throw :result, "Constrict: Could not read input file. Was it moved or deleted before compression?"
+          throw :result,
+            _(
+              "Constrict: Could not read input file. Was it moved or deleted " \
+              "before compression?",
+            )
         end
 
         target_bytes_limit = target_size_mib * 1024 * 1024
@@ -699,7 +706,11 @@ module Constrict
     def probed_source(file_input)
       probe_source(file_input)
     rescue ProbeError
-      throw :result, "Constrict: Could not retrieve video properties. Source video may be missing or corrupted."
+      throw :result,
+        _(
+          "Constrict: Could not retrieve video properties. " \
+          "Source video may be missing or corrupted.",
+        )
     end
 
     # Every property `compress` needs from the source, read in one go so a
@@ -731,9 +742,16 @@ module Constrict
       File.open(file_output, File::WRONLY | File::CREAT | File::EXCL).close
       nil
     rescue Errno::EEXIST
-      "Constrict: Could not create exported file. A file with the reserved name already exists."
+      _(
+        "Constrict: Could not create exported file. A file with the " \
+        "reserved name already exists.",
+      )
     rescue Errno::EACCES, Errno::EPERM, Errno::EROFS
-      "Constrict: Could not create exported file. There are insufficient permissions to create a file at the requested export path."
+      _(
+        "Constrict: Could not create exported file. There are " \
+        "insufficient permissions to create a file at the requested export " \
+        "path.",
+      )
     end
 
     def vainfo_entries
@@ -1058,7 +1076,11 @@ module Constrict
 
           # Below 5 kbps barely anything in the video is perceptible.
           if video_bitrate < 5000
-            throw :attempts, "Constrict: Video bitrate got too low (<5 kbps). The target size may be too low for this file."
+            throw :attempts,
+              _(
+                "Constrict: Video bitrate got too low (<5 " \
+                "kbps). The target size may be too low for this file.",
+              )
           end
 
           width, height = scaled_resolution(
@@ -1099,7 +1121,11 @@ module Constrict
           end
 
           unless File.exist?(file_output)
-            throw :attempts, "Constrict: Cannot read output file. Was it moved or deleted mid-compression?"
+            throw :attempts,
+              _(
+                "Constrict: Cannot read output file. Was " \
+                "it moved or deleted mid-compression?",
+              )
           end
 
           state[:after_size_bytes] = File.size(file_output)

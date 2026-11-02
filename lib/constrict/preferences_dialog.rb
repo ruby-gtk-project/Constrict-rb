@@ -2,6 +2,8 @@
 
 require "adwaita"
 
+require_relative "i18n"
+
 module Constrict
   # Ported from upstream's src/preferences_dialog.blp and
   # src/preferences_dialog.py.
@@ -14,6 +16,8 @@ module Constrict
   # on `notify::active` and read back when the dialog is built — the same
   # two-way behaviour, without the binding.
   class PreferencesDialog < Adwaita::PreferencesDialog
+    include I18n
+
     type_register
 
     # The resolution floor below which hardware encoding is never used, as the
@@ -29,7 +33,7 @@ module Constrict
 
     def build
       tap do |dialog|
-        dialog.title = "Preferences"
+        dialog.title = _("Preferences")
         # Upstream notes this height is a workaround for a libadwaita sizing
         # bug, not a design choice.
         dialog.content_height = 425
@@ -61,33 +65,43 @@ module Constrict
 
     def hw_accel_group
       @hw_accel_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Hardware Acceleration"
-        group.description = "Hardware acceleration is only used if your GPU " \
-          "supports encoding with the selected video codec. Additionally, " \
-          "it’s only used when compressing to #{HA_FLOOR} or higher, with " \
-          "“Extra Quality” disabled."
+        group.title = _("Hardware Acceleration")
+        group.description = interpolate(
+          _(
+            "Hardware acceleration is only used if your GPU supports " \
+            "encoding with the selected video codec. Additionally, it’s only " \
+            "used when compressing to {} or higher, with “Extra Quality” " \
+            "disabled.",
+          ),
+          HA_FLOOR,
+        )
       end
     end
 
     def gpu_encoding_row
       @gpu_encoding_row ||= Adwaita::SwitchRow.new.tap do |row|
-        row.title = "GPU Encoding"
-        row.subtitle = "Use the GPU to speed up encoding when available"
+        row.title = _("GPU Encoding")
+        row.subtitle = _("Use the GPU to speed up encoding when available")
       end
     end
 
     def suffix_group
       @suffix_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Exported Video Suffix"
-        group.description = "Used in file names for exported videos, between " \
-          "the base name and extension. If the custom suffix is left empty, " \
-          "the default suffix of “#{@default_suffix}” will be used."
+        group.title = _("Exported Video Suffix")
+        group.description = interpolate(
+          _(
+            "Used in file names for exported videos, between the base name " \
+            "and extension. If the custom suffix is left empty, the default " \
+            "suffix of “{}” will be used.",
+          ),
+          @default_suffix,
+        )
       end
     end
 
     def suffix_entry_row
       @suffix_entry_row ||= Adwaita::EntryRow.new.tap do |row|
-        row.title = "Custom Suffix"
+        row.title = _("Custom Suffix")
         row.show_apply_button = true
       end
     end
@@ -96,7 +110,7 @@ module Constrict
 
       def update_custom_suffix(text)
         @settings["custom-export-suffix"] = text
-        add_toast(Adwaita::Toast.new("Changes applied"))
+        add_toast(Adwaita::Toast.new(_("Changes applied")))
       end
   end
 end

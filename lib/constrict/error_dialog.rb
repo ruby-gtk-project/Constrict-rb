@@ -2,6 +2,7 @@
 
 require "adwaita"
 
+require_relative "i18n"
 require_relative "shared"
 
 module Constrict
@@ -11,6 +12,8 @@ module Constrict
   # view, with a button that copies it to the clipboard and confirms with a
   # toast. The text view is read-only: it is there to be read and copied.
   class ErrorDialog < Adwaita::Dialog
+    include I18n
+
     type_register
 
     def initialize(video_name, error_details)
@@ -22,7 +25,7 @@ module Constrict
 
     def build
       tap do |dialog|
-        dialog.title = "Compression Error"
+        dialog.title = _("Compression Error")
         dialog.content_width = 600
         dialog.content_height = 450
         dialog.child = toolbar_view
@@ -51,19 +54,22 @@ module Constrict
 
     def preference_page
       @preference_page ||= Adwaita::PreferencesPage.new.tap do |page|
-        page.description = "There was a problem compressing “#{Shared.markup_escape(@video_name)}”"
+        page.description = interpolate(
+          _("There was a problem compressing “{}”"),
+          Shared.markup_escape(@video_name),
+        )
       end
     end
 
     def details_group
       @details_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Details"
+        group.title = _("Details")
       end
     end
 
     def copy_button
       @copy_button ||= Gtk::Button.new.tap do |button|
-        button.tooltip_text = "Copy Details"
+        button.tooltip_text = _("Copy Details")
         button.icon_name = "edit-copy-symbolic"
         button.valign = :center
         button.action_name = "dialog.copy-details"
@@ -112,7 +118,7 @@ module Constrict
 
       def copy_details
         clipboard.set(text_view.buffer.text)
-        toast_overlay.add_toast(Adwaita::Toast.new("Details copied to clipboard"))
+        toast_overlay.add_toast(Adwaita::Toast.new(_("Details copied to clipboard")))
       end
   end
 end

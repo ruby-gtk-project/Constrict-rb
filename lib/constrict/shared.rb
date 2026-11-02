@@ -3,6 +3,8 @@
 require "fileutils"
 require "adwaita"
 
+require_relative "i18n"
+
 module Constrict
   # Ported from upstream's src/shared.py.
   #
@@ -10,6 +12,8 @@ module Constrict
   # and thumbnails are written to, and the shim that decides whether a UI
   # update runs inline or has to be bounced through the main loop.
   module Shared
+    extend I18n
+
     module_function
 
     # Returns the path of the app's directory inside the system temp directory,
@@ -53,10 +57,12 @@ module Constrict
       "#{vid_height}p@#{vid_fps.round}".then do |res_fps|
         if is_hq_audio.nil?
           res_fps
-        elsif is_hq_audio
-          "#{res_fps}, HQ audio"
         else
-          "#{res_fps}, LQ audio"
+          interpolate(
+            _("{res_fps}, {audio_quality} audio"),
+            res_fps:       res_fps,
+            audio_quality: is_hq_audio ? _("HQ") : _("LQ"),
+          )
         end
       end
     end

@@ -1,0 +1,20 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+#
+# Upstream also lists data/io.github.wartybix.Constrict.desktop.in,
+# .metainfo.xml.in and .gschema.xml.in here. This port has no desktop entry,
+# no AppStream metainfo and no GSettings schema — its settings live in a JSON
+# file — so the strings those three contributed are present in the .po files
+# but have no source file to extract from here.
+lib/constrict/application.rb
+lib/constrict/attempt_fail_box.rb
+lib/constrict/constrict_utils.rb
+lib/constrict/current_attempt_box.rb
+lib/constrict/drag_overlay.rb
+lib/constrict/error_dialog.rb
+lib/constrict/preferences_dialog.rb
+lib/constrict/shared.rb
+lib/constrict/shortcuts_dialog.rb
+lib/constrict/sources_list_box.rb
+lib/constrict/sources_row.rb
+lib/constrict/window.rb

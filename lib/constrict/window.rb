@@ -7,6 +7,7 @@ require_relative "current_attempt_box"
 require_relative "drag_overlay"
 require_relative "enums"
 require_relative "error_dialog"
+require_relative "i18n"
 require_relative "shared"
 require_relative "sources_list_box"
 require_relative "sources_row"
@@ -24,10 +25,16 @@ module Constrict
   # failed attempts, errors and completion back through the callbacks the
   # backend calls.
   class ConstrictWindow < Adwaita::ApplicationWindow
+    include I18n
+
     type_register
 
     STATUS_PAGE = "status_page"
     QUEUE_PAGE = "queue_page"
+
+    # The framerate a bitrate too low to carry more gets capped to, quoted by
+    # the framerate help popover. ConstrictUtils caps at the same number.
+    FPS_FLOOR = 24
 
     # Videos, plus animated GIFs, which ffmpeg treats as video too.
     VIDEO_MIME_PREFIX = "video/"
@@ -51,7 +58,7 @@ module Constrict
 
     def build
       tap do |window|
-        window.title = "Constrict"
+        window.title = _("Constrict")
         window.set_default_size(@settings["window-width"], @settings["window-height"])
         window.width_request = 360
         window.height_request = 294
@@ -88,7 +95,7 @@ module Constrict
         view.content = status_overlay
 
         status_header_bar.tap do |bar|
-          bar.title_widget = Adwaita::WindowTitle.new("Constrict", "")
+          bar.title_widget = Adwaita::WindowTitle.new(_("Constrict"), "")
           bar.pack_end(primary_menu_button)
         end
 
@@ -133,7 +140,7 @@ module Constrict
         view.content = settings_page
 
         sidebar_header_bar.tap do |bar|
-          bar.title_widget = Adwaita::WindowTitle.new("Constrict", "")
+          bar.title_widget = Adwaita::WindowTitle.new(_("Constrict"), "")
           bar.pack_end(sidebar_menu_button)
         end
 
@@ -226,7 +233,7 @@ module Constrict
     def queue_page = @queue_page ||= Adwaita::PreferencesPage.new
     def target_size_group = @target_size_group ||= Adwaita::PreferencesGroup.new
     def sources_list_box = @sources_list_box ||= SourcesListBox.new
-    def main_view_title = @main_view_title ||= Adwaita::WindowTitle.new("Constrict", "")
+    def main_view_title = @main_view_title ||= Adwaita::WindowTitle.new(_("Constrict"), "")
 
     # Collapses the sidebar over the content, rather than beside it, once the
     # window is too narrow to show both.
@@ -250,15 +257,15 @@ module Constrict
     def status_page
       @status_page ||= Adwaita::StatusPage.new.tap do |page|
         page.icon_name = "video-encoder-symbolic"
-        page.title = "Compress Videos"
-        page.description = "Drag and drop videos here"
+        page.title = _("Compress Videos")
+        page.description = _("Drag and drop videos here")
         page.add_css_class("drop-widget")
       end
     end
 
     def open_button
       @open_button ||= Gtk::Button.new.tap do |button|
-        button.label = "_Open…"
+        button.label = _("_Open…")
         button.use_underline = true
         button.action_name = "win.open"
         button.can_shrink = true
@@ -280,14 +287,14 @@ module Constrict
       @primary_menu ||= Gio::Menu.new.tap do |menu|
         menu.append_section(
           nil,
-          Gio::Menu.new.tap { |section| section.append("_New Window", "app.new-window") },
+          Gio::Menu.new.tap { |section| section.append(_("_New Window"), "app.new-window") },
         )
         menu.append_section(
           nil,
           Gio::Menu.new.tap do |section|
-            section.append("_Preferences", "app.preferences")
-            section.append("_Keyboard Shortcuts", "app.shortcuts")
-            section.append("_About Constrict", "app.about")
+            section.append(_("_Preferences"), "app.preferences")
+            section.append(_("_Keyboard Shortcuts"), "app.shortcuts")
+            section.append(_("_About Constrict"), "app.about")
           end,
         )
       end
@@ -296,7 +303,7 @@ module Constrict
     def show_sidebar_button
       @show_sidebar_button ||= Gtk::ToggleButton.new.tap do |button|
         button.icon_name = "sidebar-show-symbolic"
-        button.tooltip_text = "Toggle Settings Pane"
+        button.tooltip_text = _("Toggle Settings Pane")
         button.active = true
         button.visible = false
       end
@@ -304,19 +311,19 @@ module Constrict
 
     def warning_banner
       @warning_banner ||= Adwaita::Banner.new(
-        "Issues with video sources — fix before compressing",
+        _("Issues with video sources — fix before compressing"),
       )
     end
 
     def sources_group
       @sources_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Video Sources"
+        group.title = _("Video Sources")
       end
     end
 
     def clear_all_button
       @clear_all_button ||= Gtk::Button.new.tap do |button|
-        button.label = "_Clear All"
+        button.label = _("_Clear All")
         button.use_underline = true
         button.action_name = "win.clear_all"
         button.valign = :center
@@ -353,7 +360,7 @@ module Constrict
 
     def target_size_row
       @target_size_row ||= Adwaita::SpinRow.new(target_size_input, 1, 0).tap do |row|
-        row.title = "Target _Size (MiB)"
+        row.title = interpolate(_("Target _Size ({})"), _("MiB"))
         row.use_underline = true
         row.numeric = true
       end
@@ -361,24 +368,39 @@ module Constrict
 
     def fps_group
       @fps_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Framerate Limit"
+        group.title = _("Framerate Limit")
       end
     end
 
     def auto_row
       @auto_row ||= check_row(
-        "_Automatic",
-        "Use the highest framerate without sacrificing resolution",
+        _("_Automatic"),
+        _("Use the highest framerate without sacrificing resolution"),
         auto_check_button,
       )
     end
 
     def clear_row
-      @clear_row ||= check_row("_30 FPS", "Ensure higher image clarity", clear_check_button)
+      @clear_row ||= check_row(
+        fps_title("_30"),
+        _("Ensure higher image clarity"),
+        clear_check_button,
+      )
     end
 
     def smooth_row
-      @smooth_row ||= check_row("_60 FPS", "Ensure smoother motion", smooth_check_button)
+      @smooth_row ||= check_row(
+        fps_title("_60"),
+        _("Ensure smoother motion"),
+        smooth_check_button,
+      )
+    end
+
+    # The framerate rows share one msgid, so that "FPS" is translated once for
+    # both. The mnemonic underscore travels with the number upstream puts in
+    # the placeholder.
+    def fps_title(value)
+      interpolate(_("{}\u202FFPS"), value)
     end
 
     def auto_check_button
@@ -393,7 +415,7 @@ module Constrict
 
     def encoding_group
       @encoding_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Encoding Options"
+        group.title = _("Encoding Options")
       end
     end
 
@@ -401,7 +423,7 @@ module Constrict
     # the order of these strings matters.
     def codec_dropdown
       @codec_dropdown ||= Adwaita::ComboRow.new.tap do |row|
-        row.title = "_Video Codec"
+        row.title = _("_Video Codec")
         row.use_underline = true
         row.model = Gtk::StringList.new(["H.264", "H.265 (HEVC)", "AV1", "VP9"])
       end
@@ -409,15 +431,15 @@ module Constrict
 
     def extra_quality_toggle
       @extra_quality_toggle ||= Adwaita::SwitchRow.new.tap do |row|
-        row.title = "Extra _Quality"
+        row.title = _("Extra _Quality")
         row.use_underline = true
-        row.subtitle = "Increase image quality at the cost of compression time"
+        row.subtitle = _("Increase image quality at the cost of compression time")
       end
     end
 
     def advanced_group
       @advanced_group ||= Adwaita::PreferencesGroup.new.tap do |group|
-        group.title = "Advanced Options"
+        group.title = _("Advanced Options")
       end
     end
 
@@ -434,9 +456,9 @@ module Constrict
 
     def tolerance_row
       @tolerance_row ||= Adwaita::SpinRow.new(tolerance_input, 1, 0).tap do |row|
-        row.title = "_Tolerance (%)"
+        row.title = _("_Tolerance (%)")
         row.use_underline = true
-        row.subtitle = "How far end file sizes can be below target"
+        row.subtitle = _("How far end file sizes can be below target")
         row.numeric = true
       end
     end
@@ -448,8 +470,13 @@ module Constrict
 
     def fps_help_label
       @fps_help_label ||= help_label(
-        "Videos compressed to low bitrates may be capped to 24 FPS, " \
-          "regardless of the option set.",
+        interpolate(
+          _(
+            "Videos compressed to low bitrates may be capped to " \
+            "{}\u202FFPS, regardless of the option set.",
+          ),
+          FPS_FLOOR,
+        ),
       )
     end
 
@@ -463,9 +490,11 @@ module Constrict
 
     def enc_options_help_label
       @enc_options_help_label ||= help_label(
-        "H.264 is recommended for resolutions up to 1080p.\n\n" \
-          "H.265 (HEVC), AV1, and VP9, are optimized for resolutions of " \
-          "1080p and higher.",
+        _(
+          "H.264 is recommended for resolutions up to 1080p.\n\nH.265 " \
+          "(HEVC), AV1, and VP9, are optimized for resolutions of 1080p and " \
+          "higher.",
+        ),
       )
     end
 
@@ -479,11 +508,16 @@ module Constrict
 
     def adv_options_help_label
       @adv_options_help_label ||= help_label(
-        "Decreasing the tolerance maximizes image quality by reducing how " \
-          "much compressed file sizes can be under target. However, this can " \
-          "increase the number of attempts needed to meet the target, " \
-          "increasing compression time. A tolerance of " \
-          "#{@settings.default_value("tolerance")} % or more is recommended.",
+        interpolate(
+          _(
+            "Decreasing the tolerance maximizes image quality by reducing " \
+            "how much compressed file sizes can be under target. However, " \
+            "this can increase the number of attempts needed to meet the " \
+            "target, increasing compression time. A tolerance of " \
+            "{}\u202F% or more is recommended.",
+          ),
+          @settings.default_value("tolerance"),
+        ),
       ).tap { |label| label.max_width_chars = 50 }
     end
 
@@ -572,7 +606,11 @@ module Constrict
         self.progress = 0.0
 
         unsupported_mimes.uniq.each do |mime|
-          toast_overlay.add_toast(Adwaita::Toast.new("Unknown video format “#{mime}”"))
+          toast_overlay.add_toast(
+            Adwaita::Toast.new(
+              interpolate(_("Unknown video format “{}”"), mime),
+            ),
+          )
         end
 
         sources_list_box.add_sources(staged_rows)
@@ -665,7 +703,7 @@ module Constrict
         self.title = compressing_title(sources, current_index)
 
         main_view_title.title = title
-        main_view_title.subtitle = "Exporting to #{export_dir}"
+        main_view_title.subtitle = interpolate(_("Exporting to {}"), export_dir)
       end
     end
 
@@ -689,7 +727,7 @@ module Constrict
         Gtk::MenuButton.new.tap do |button|
           button.primary = true
           button.icon_name = "open-menu-symbolic"
-          button.tooltip_text = "Main Menu"
+          button.tooltip_text = _("Main Menu")
           button.menu_model = primary_menu
         end
       end
@@ -750,7 +788,7 @@ module Constrict
       def help_button(popover)
         Gtk::MenuButton.new.tap do |button|
           button.icon_name = "help-about-symbolic"
-          button.tooltip_text = "More Information"
+          button.tooltip_text = _("More Information")
           button.popover = popover
           button.add_css_class("flat")
         end
@@ -827,19 +865,30 @@ module Constrict
 
       def queued_title(sources)
         if sources.empty?
-          "Constrict"
+          _("Constrict")
         elsif sources.length == 1
-          "“#{sources.first.display_name}” Queued"
+          interpolate(_("“{}” Queued"), sources.first.display_name)
         else
-          "#{sources.length} Videos Queued"
+          interpolate(
+            ngettext("{} Video Queued", "{} Videos Queued", sources.length),
+            sources.length,
+          )
         end
       end
 
       def compressing_title(sources, current_index)
         if sources.length == 1
-          "Processing “#{sources.first.display_name}”"
+          interpolate(_("Processing “{}”"), sources.first.display_name)
         else
-          "#{current_index}/#{sources.length} Videos Processed"
+          interpolate(
+            ngettext(
+              "{index}/{total} Video Processed",
+              "{index}/{total} Videos Processed",
+              sources.length,
+            ),
+            index: current_index,
+            total: sources.length,
+          )
         end
       end
 
@@ -882,7 +931,7 @@ module Constrict
 
       def open_file_dialog
         Gtk::FileDialog.new.tap do |dialog|
-          dialog.title = "Pick Videos"
+          dialog.title = _("Pick Videos")
           dialog.default_filter = video_filter
 
           initial_folder(@settings["open-initial-folder"]).then do |folder|
@@ -899,7 +948,7 @@ module Constrict
 
       def video_filter
         Gtk::FileFilter.new.tap do |filter|
-          filter.name = "Videos"
+          filter.name = _("Videos")
           filter.add_mime_type("video/*")
           filter.add_mime_type(GIF_MIME_TYPE)
         end
@@ -951,12 +1000,14 @@ module Constrict
       # so it is always confirmed.
       def show_cancel_dialog(quit_on_stop)
         Adwaita::AlertDialog.new(
-          "Stop Compression?",
-          "Progress made compressing “#{@currently_processed}” will be " \
-            "permanently lost",
+          _("Stop Compression?"),
+          interpolate(
+            _("Progress made compressing “{}” will be permanently lost"),
+            @currently_processed,
+          ),
         ).tap do |dialog|
-          dialog.add_response("cancel", "_Cancel")
-          dialog.add_response("stop", "_Stop")
+          dialog.add_response("cancel", _("_Cancel"))
+          dialog.add_response("stop", _("_Stop"))
           dialog.set_response_appearance("stop", :destructive)
 
           dialog.choose(self) do |_, result|
@@ -1001,7 +1052,7 @@ module Constrict
       end
 
       def send_complete_notification(sources, export_dir)
-        Gio::Notification.new("Compression Complete").tap do |notification|
+        Gio::Notification.new(_("Compression Complete")).tap do |notification|
           notification.category = "transfer.complete"
           notification.body = notification_body(sources)
           notification.set_default_action_and_target(
@@ -1009,7 +1060,7 @@ module Constrict
             GLib::Variant.new(id, "i"),
           )
           notification.add_button_with_target(
-            "Open Export Directory",
+            _("Open Export Directory"),
             "app.open-dir",
             GLib::Variant.new(export_dir, "s"),
           )
@@ -1020,9 +1071,12 @@ module Constrict
 
       def notification_body(sources)
         if sources.length == 1
-          "“#{sources.first.display_name}” processed"
+          interpolate(_("“{}” processed"), sources.first.display_name)
         else
-          "#{sources.length} files processed"
+          interpolate(
+            ngettext("{} file processed", "{} files processed", sources.length),
+            sources.length,
+          )
         end
       end
 
@@ -1052,7 +1106,7 @@ module Constrict
         cookie = @application.inhibit(
           self,
           Gtk::ApplicationInhibitFlags::SUSPEND | Gtk::ApplicationInhibitFlags::LOGOUT,
-          "Videos are being compressed",
+          _("Videos are being compressed"),
         )
 
         compress_queue(run)
@@ -1135,7 +1189,7 @@ module Constrict
       def progress_callback(video, progress_box, codec)
         lambda do |fraction, seconds_left|
           if fraction == 0.0 && codec == VideoCodec::VP9
-            progress_box.set_progress_text("Analyzing…", true)
+            progress_box.set_progress_text(_("Analyzing…"), true)
             video.enable_spinner(true, true)
             progress_box.pulse_progress(true)
           else
@@ -1186,7 +1240,7 @@ module Constrict
         set_queued_title(false)
 
         if @compressing
-          toast_overlay.add_toast(Adwaita::Toast.new("Compression complete"))
+          toast_overlay.add_toast(Adwaita::Toast.new(_("Compression complete")))
           send_complete_notification(
             run.fetch(:sources),
             run.fetch(:destination_dir),
@@ -1197,9 +1251,11 @@ module Constrict
       end
 
       def error_toast(video)
-        Adwaita::Toast.new("Error compressing “#{video.display_name}”").tap do |toast|
+        Adwaita::Toast.new(
+          interpolate(_("Error compressing “{}”"), video.display_name),
+        ).tap do |toast|
           toast.use_markup = false
-          toast.button_label = "View _Details"
+          toast.button_label = _("View _Details")
           toast.signal_connect("button-clicked") do
             error_dialog(video.display_name, video.error_details)
           end
