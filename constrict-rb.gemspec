@@ -93,7 +93,7 @@ Gem::Specification.new do |spec|
   ]
   spec.bindir = "exe"
   # Listed files are the relative paths from bindir above.
-  spec.executables = ["constrict"]
+  spec.executables = ["constrict", "constrict-cli"]
   spec.require_paths = ["lib"]
 
   # NOTE: It is preferable to list development dependencies in the gemspec due to increased
