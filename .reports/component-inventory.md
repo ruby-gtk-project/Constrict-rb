@@ -24,21 +24,29 @@ branch. See **Open questions** below.
 
 ## Totals
 
+Counted on upstream `origin/main` and on the `ruby` branch as of commit
+`74679b7` ("Port the window, source rows, backend, dialogs and CLI"), which
+landed every widget file listed below.
+
 | | Upstream | `ruby` branch |
 |---|---:|---:|
-| Component files (widget-bearing) | 12 | 1 (a placeholder) |
+| Component files (widget-bearing) | 12 | 12 |
 | Blueprint template roots | 10 (9 `template`, 1 named root) | n/a by design |
-| Distinct GTK/Adw widget types | 38 | 5 |
-| Distinct CSS classes applied | 20 | 0 |
-| Menu models | 2 (`primary_menu`, `row_actions`) | 0 |
-| Installed actions | 18 | 0 |
-| Accelerators | 6 | 0 |
-| GSettings keys | 11 (+2 enums) | 0 |
-| Custom icons | 10 symbolic SVGs | 0 |
-| Translation catalogues | 30 `po/*.po` | 0 |
+| Distinct GTK/Adw widget types | 38 | 65 referenced `Gtk::`/`Adwaita::` constants |
+| Distinct CSS classes applied | 20 | 20 |
+| Menu models | 2 (`primary_menu`, `row_actions`) | 2 |
+| Installed actions | 18 | 18 (11 app/win + 5 `row.*` + `dialog.copy-details` + `app.shortcuts`) |
+| Accelerators | 6 | 7 (upstream's 6 plus `app.shortcuts`) |
+| GSettings keys | 11 (+2 enums) | 11 (+2 enums), in `lib/constrict/settings.rb` |
+| Custom icons | 10 symbolic SVGs | 10, under `data/icons/hicolor/scalable/actions/` |
+| Translation catalogues | 30 `po/*.po` | **0 — the one whole-surface gap** |
 
-The port is a status page that says the port has not been written yet. Every
-user-facing component below is missing.
+Every user-facing component upstream has a counterpart file on `ruby`. The
+remaining gap is translation: there is no `po/` directory and no
+`lib/constrict/i18n.rb`, so all 30 catalogues and every `ngettext`/`C_` call
+site are unported. The two components built inline upstream — the cancel
+`Adw.AlertDialog` and the `Adw.AboutDialog` — stayed inline in the port, in
+`window.rb` and `application.rb` respectively, matching one-file-per-upstream-file.
 
 ---
 
@@ -56,9 +64,9 @@ Not a widget class, but it owns the whole action surface.
 | CSS | `devel` added to the window when the app id ends `.Devel` |
 | Notes | `quit` is overridden to close each window in turn so a compressing window can show its cancel dialog. `do_open` stages the files it is handed. |
 
-Port target: `lib/constrict/application.rb` — **exists, placeholder only.** The
-About dialog may deserve its own `lib/constrict/about_dialog.rb`; see Open
-questions.
+Port target: `lib/constrict/application.rb` — **exists (213 lines).** The About dialog
+stayed inline here, as upstream has it. `app.shortcuts` is installed, which
+upstream never does.
 
 ## src/window.blp + src/window.py — the main window, both of its pages
 
@@ -149,8 +157,8 @@ widgets, but both are settings-bound and signal-connected.
 | Repeaters | the staging loop builds one `SourcesRow` per accepted file; the compression loop builds one `CurrentAttemptBox` per video and N `AttemptFailBox`es per video |
 | Conditional | `warning_banner` revealed only in a warning state; `cancel_bar`/`export_bar` swap on compressing; the sidebar auto-collapses when the queue empties; `view_stack` flips to `status_page` when the last source is removed |
 
-Port target: `lib/constrict/window.rb` — **missing.** This is big enough that
-the cancel dialog may want its own file; see Open questions.
+Port target: `lib/constrict/window.rb` — **exists (1370 lines, the largest file in
+the port).** The cancel `Adw.AlertDialog` stayed inline, as upstream has it.
 
 ## src/sources_list_box.blp + src/sources_list_box.py — the queue list
 
@@ -167,7 +175,7 @@ before it; `move` is remove-then-insert; `update_rows` runs per row and sets
 disables `row.move-up` (not first), `row.move-down` (not last) and `row.remove`
 (not locked). A `locked` flag mirrors the window's controls lock.
 
-Port target: `lib/constrict/sources_list_box.rb` — **missing.**
+Port target: `lib/constrict/sources_list_box.rb` — **exists (118 lines).**
 
 ## src/sources_row.blp + src/sources_row.py — one video in the queue
 
@@ -209,7 +217,7 @@ States (`SourceState`): `PENDING`, `COMPRESSING`, `COMPLETE`, `ERROR`,
 `BROKEN`, `INCOMPATIBLE`, `WARN`. `BROKEN` and `INCOMPATIBLE` additionally
 fire the window's warning action, which blocks export; `WARN` does not.
 
-Port target: `lib/constrict/sources_row.rb` — **missing.**
+Port target: `lib/constrict/sources_row.rb` — **exists (805 lines).**
 
 ## src/progress_pie.py — the circular progress indicator
 
@@ -218,8 +226,8 @@ both ways, with a `set_draw_func` that paints a background disc at alpha 0.15
 and a foreground pie wedge from −90° using the widget's own `get_color()`.
 `set_fraction` stores and queues a redraw.
 
-Port target: `lib/constrict/progress_pie.rb` — **missing.** Needs Cairo
-drawing through the Ruby bindings, not a Python `cairo.Context`.
+Port target: `lib/constrict/progress_pie.rb` — **exists (91 lines)**, drawing through
+the Ruby Cairo bindings rather than a Python `cairo.Context`.
 
 ## src/progress_popover_box.blp + src/progress_popover_box.py — the progress popover body
 
@@ -228,7 +236,7 @@ drawing through the Ruby bindings, not a Python `cairo.Context`.
 inserted after it. `get_message` concatenates every child's labels with
 `'... '` for the screen reader.
 
-Port target: `lib/constrict/progress_popover_box.rb` — **missing.**
+Port target: `lib/constrict/progress_popover_box.rb` — **exists (68 lines).**
 
 ## src/current_attempt_box.blp + src/current_attempt_box.py — the running attempt
 
@@ -246,7 +254,7 @@ The ETA string is a four-branch, `ngettext`-pluralised ladder (seconds; minutes;
 hours + minutes under 4h; hours only above) — a translation surface in its own
 right.
 
-Port target: `lib/constrict/current_attempt_box.rb` — **missing.**
+Port target: `lib/constrict/current_attempt_box.rb` — **exists (180 lines).**
 
 ## src/attempt_fail_box.blp + src/attempt_fail_box.py — one failed attempt
 
@@ -261,7 +269,7 @@ Port target: `lib/constrict/current_attempt_box.rb` — **missing.**
 | `Gtk.Image` `failure_icon` | 1 | — | `arrow2-up-symbolic` when too large, `arrow2-down-symbolic` when too small |
 | `Gtk.Label` `failure_details_label` | 1 | — | "Compressed file size was too large/small ({size} MiB)", wrap `word_char`, 40 chars |
 
-Port target: `lib/constrict/attempt_fail_box.rb` — **missing.**
+Port target: `lib/constrict/attempt_fail_box.rb` — **exists (147 lines).**
 
 ## src/drag_overlay.blp + src/drag_overlay.py — the drop-hint overlay
 
@@ -276,9 +284,9 @@ Port target: `lib/constrict/attempt_fail_box.rb` — **missing.**
 | `Adw.Bin` | 1 | `background` | |
 | `Adw.StatusPage` | 1 | `overlay-status` | "Drop Videos to Import", `video-x-generic-symbolic` |
 
-Port target: `lib/constrict/drag_overlay.rb` — **missing.** The two custom
-properties (`child`, `drop_target`) are the quirky part under the Ruby
-bindings.
+Port target: `lib/constrict/drag_overlay.rb` — **exists (82 lines).** The two custom
+properties (`child`, `drop_target`) are handled as plain accessors rather than
+GObject properties.
 
 ## src/error_dialog.blp + src/error_dialog.py — compression error details
 
@@ -295,7 +303,7 @@ bindings.
 | `Gtk.ScrolledWindow` | 1 | `card` | — | `overflow: hidden`, `vexpand` |
 | `Gtk.TextView` `text_view` | 1 | `monospace`, `inline` | — | read-only, 12px margins, `word_char` wrap; buffer holds the ffmpeg error text |
 
-Port target: `lib/constrict/error_dialog.rb` — **missing.**
+Port target: `lib/constrict/error_dialog.rb` — **exists (118 lines).**
 
 ## src/preferences_dialog.blp + src/preferences_dialog.py — preferences
 
@@ -314,7 +322,7 @@ Port target: `lib/constrict/error_dialog.rb` — **missing.**
 The default suffix is `" (compressed)"`, built on the application and
 translated; both this dialog and the export path read it.
 
-Port target: `lib/constrict/preferences_dialog.rb` — **missing.**
+Port target: `lib/constrict/preferences_dialog.rb` — **exists (102 lines).**
 
 ## src/gtk/shortcuts-dialog.blp — the keyboard shortcuts dialog
 
@@ -331,8 +339,8 @@ the action.
 
 Titles use the `shortcut window` gettext context (`C_(...)`).
 
-Port target: `lib/constrict/shortcuts_dialog.rb` — **missing.** The pilot port
-has a worked equivalent in `gnome-contacts-rb/lib/shortcuts_dialog.rb`.
+Port target: `lib/constrict/shortcuts_dialog.rb` — **exists (63 lines)**, with the
+`app.shortcuts` action installed in `application.rb` so the menu item works.
 
 ---
 
@@ -340,42 +348,38 @@ has a worked equivalent in `gnome-contacts-rb/lib/shortcuts_dialog.rb`.
 
 | Upstream | Port target | Kind | Present | Notes |
 |---|---|---|---|---|
-| `src/gtk/style.css` | `lib/constrict/style.rb` (inline CSS loaded via `Gtk::CssProvider`) | stylesheet | no | defines `.drag-handle`, `.drag-handle:backdrop`, `.overlay-status`, `.overlay-status label`, `.drop-widget`. All five are applied; the other 15 classes in use are stock Adwaita |
-| `data/io.github.wartybix.Constrict.gschema.xml.in` | `lib/constrict/settings.rb` | GSettings schema | no | 11 keys + the `FpsMode` and `VideoCodec` enums. Note `tolerance` defaults to **25** in the schema while the blueprint adjustment says 10, and the advanced-help string interpolates the schema default |
-| `src/enums.py` | `lib/constrict/enums.rb` | enums | no | `FpsMode` (3), `VideoCodec` (4), `SourceState` (7) |
-| `src/shared.py` | `lib/constrict/shared.rb` | helper | no | `get_tmp_dir`, and `update_ui` — the GLib.idle_add-vs-direct-call shim threaded through every setter above. Ruby will want a different shape for this |
-| `src/constrict_utils.py` | `lib/constrict/constrict_utils.rb` | backend (994 lines) | no | ffmpeg/ffprobe driver: `compress`, `transcode`, `get_encode_settings`, resolution/framerate/duration/audio probes, `get_progress`, `will_ha_work`, subtitle streams. No UI, but every progress and failure string above comes from its callbacks |
-| `src/constrict_cli.py` | `lib/constrict/cli.rb` | CLI | no | `constrict-cli` with `-i -s -t -o --framerate --extra-quality --codec --software-encode`, plus its own terminal progress output. A separate user-facing surface |
-| `src/constrict.gresource.xml.in` | n/a — plus an icon search path | GResource manifest | no | the 10 `.ui` entries have no Ruby equivalent (the house style builds widgets in code); the 10 icon entries do need loading |
-| `data/icons/scalable/actions/*.svg` | `data/icons/` + `Gtk::IconTheme#add_search_path` | assets | no | `video-encoder`, `error-outline`, `broken-video`, `exclamation-mark`, `warning-outline`, `check-plain`, `arrow2-down`, `arrow2-up`, `list-drag-handle`, `help-about` — all symbolic, all referenced by name above |
-| `po/*.po` (30 languages), `po/LINGUAS`, `po/POTFILES.in` | `po/` + `lib/constrict/i18n.rb` | translations | no | upstream marks strings in 11 `.py`/`.blp` files plus the desktop, metainfo and gschema files, and uses `ngettext` in 4 places and `C_` in one |
+| `src/gtk/style.css` | `lib/constrict/style.rb` | stylesheet | **yes** (66 lines, inline CSS via `Gtk::CssProvider`, loaded on `startup`) | defines `.drag-handle`, `.drag-handle:backdrop`, `.overlay-status`, `.overlay-status label`, `.drop-widget`. The other 15 classes in use are stock Adwaita |
+| `data/io.github.wartybix.Constrict.gschema.xml.in` | `lib/constrict/settings.rb` | GSettings schema | **yes** (102 lines) | 11 keys + the `FpsMode` and `VideoCodec` enums. Note `tolerance` defaults to **25** in the schema while the blueprint adjustment says 10, and the advanced-help string interpolates the schema default |
+| `src/enums.py` | `lib/constrict/enums.rb` | enums | **yes** (59 lines) | `FpsMode` (3), `VideoCodec` (4), `SourceState` (7) |
+| `src/shared.py` | `lib/constrict/shared.rb` | helper | **yes** (75 lines) | `get_tmp_dir` and the `update_ui` idle-add shim |
+| `src/constrict_utils.py` | `lib/constrict/constrict_utils.rb` | backend | **yes** (1178 lines, upstream 994) | ffmpeg/ffprobe driver: `compress`, `transcode`, `get_encode_settings`, resolution/framerate/duration/audio probes, `get_progress`, `will_ha_work`, subtitle streams |
+| `src/constrict_cli.py` | `lib/constrict/cli.rb` | CLI | **yes** (233 lines) | `-i -s -t -o --framerate --extra-quality --codec --software-encode` plus terminal progress output |
+| `src/constrict.gresource.xml.in` | n/a — plus an icon search path | GResource manifest | **n/a** | the 10 `.ui` entries have no Ruby equivalent (widgets are built in code); the 10 icon entries are served from `data/icons/` |
+| `data/icons/scalable/actions/*.svg` | `data/icons/hicolor/scalable/actions/` + `Gtk::IconTheme#add_search_path` | assets | **yes** (all 10) | `video-encoder`, `error-outline`, `broken-video`, `exclamation-mark`, `warning-outline`, `check-plain`, `arrow2-down`, `arrow2-up`, `list-drag-handle`, `help-about` |
+| `po/*.po` (30 languages), `po/LINGUAS`, `po/POTFILES.in` | `po/` + `lib/constrict/i18n.rb` | translations | **no — the one outstanding gap** | upstream marks strings in 11 `.py`/`.blp` files plus the desktop, metainfo and gschema files, with `ngettext` in 4 places and `C_` in one. The port has no `po/` directory and no gettext wiring; strings are English literals |
 
 ---
 
-## Open questions
+## Open questions — resolved by the port, and what is left
 
-1. **`lib/<thing>.rb` vs `lib/constrict/<thing>.rb`.** The brief says
-   `lib/<thing>.rb` and the pilot port is flat with top-level classes; this
-   repo is a gem whose only existing widget file is
-   `lib/constrict/application.rb` under `module Constrict`, which
-   `exe/constrict` already calls as `Constrict::Application`. This inventory
-   assumes the gem layout. If the flat layout is wanted instead, the existing
-   file and `exe/constrict` both have to move.
-2. **Components with no upstream file of their own.** The cancel
-   `Adw.AlertDialog` and the `Adw.AboutDialog` are built inline in `window.py`
-   and `main.py`. One-file-per-upstream-file puts them in `window.rb` and
-   `application.rb`; `window.rb` is already the largest unit by a wide margin,
-   so splitting the cancel dialog into `lib/constrict/cancel_dialog.rb` is
-   worth deciding before the window is written.
-3. **`update_ui`'s threading model.** Upstream passes a `daemon` boolean
-   through roughly forty setters to choose between a direct call and
-   `GLib.idle_add`. Upstream's own comment calls it code that should be
-   replaced. The port needs one decision here before any of the progress
-   components are written, because the flag is in almost every signature.
-4. **Thumbnails depend on `Gly`/`GlyGtk4` and the `gst-video-thumbnailer`
-   binary.** Whether the Ruby bindings and the dev shell can supply those
-   decides whether `sources_row.rb` gets real thumbnails or only the generic
-   icon fallback.
-5. **`app.shortcuts` does not exist upstream.** The menu item and the
-   shortcuts dialog are both dead on `origin/main`. The port should install
-   the action — flagged here so it does not read as an unexplained extra.
+1. **`lib/<thing>.rb` vs `lib/constrict/<thing>.rb`** — resolved as the gem
+   layout, `lib/constrict/<thing>.rb` under `module Constrict`, which is what
+   `exe/constrict` and `lib/constrict.rb` load.
+2. **Components with no upstream file of their own** — resolved by keeping
+   one-file-per-upstream-file: the cancel `Adw.AlertDialog` lives in
+   `window.rb` (`show_cancel_dialog`) and the `Adw.AboutDialog` in
+   `application.rb` (`about_dialog`). No `cancel_dialog.rb` or
+   `about_dialog.rb` was created.
+3. **`update_ui`'s threading model** — resolved in `lib/constrict/shared.rb`.
+4. **Thumbnails depend on `Gly`/`GlyGtk4` and `gst-video-thumbnailer`** — still
+   worth verifying in the dev shell; `sources_row.rb` carries the generic-icon
+   fallback either way.
+5. **`app.shortcuts` does not exist upstream** — the port installs it, so the
+   `primary_menu` item and `shortcuts-dialog.blp` are both live. This is a
+   deliberate extra, not a divergence to correct.
+6. **Translation (still open).** The only whole surface with no port: no `po/`
+   directory, no `lib/constrict/i18n.rb`, no `ngettext`/`C_` equivalents. The
+   pluralised window titles, the four-branch ETA ladder in
+   `current_attempt_box.rb`, and the `shortcut window` gettext context in
+   `shortcuts_dialog.rb` are the three places where this is more than a string
+   swap.
