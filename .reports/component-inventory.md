@@ -25,8 +25,9 @@ branch. See **Open questions** below.
 ## Totals
 
 Counted on upstream `origin/main` and on the `ruby` branch as of commit
-`74679b7` ("Port the window, source rows, backend, dialogs and CLI"), which
-landed every widget file listed below.
+`d124914` ("Port the translations and the gettext call sites"), the current
+tip of `ruby` as of this update — every widget file plus translations are
+landed.
 
 | | Upstream | `ruby` branch |
 |---|---:|---:|
@@ -39,14 +40,25 @@ landed every widget file listed below.
 | Accelerators | 6 | 7 (upstream's 6 plus `app.shortcuts`) |
 | GSettings keys | 11 (+2 enums) | 11 (+2 enums), in `lib/constrict/settings.rb` |
 | Custom icons | 10 symbolic SVGs | 10, under `data/icons/hicolor/scalable/actions/` |
-| Translation catalogues | 30 `po/*.po` | **0 — the one whole-surface gap** |
+| Translation catalogues | 30 `po/*.po` | 30, carried into the gem's `po/` directory and read by `lib/constrict/i18n.rb` (352 lines) |
 
-Every user-facing component upstream has a counterpart file on `ruby`. The
-remaining gap is translation: there is no `po/` directory and no
-`lib/constrict/i18n.rb`, so all 30 catalogues and every `ngettext`/`C_` call
-site are unported. The two components built inline upstream — the cancel
-`Adw.AlertDialog` and the `Adw.AboutDialog` — stayed inline in the port, in
-`window.rb` and `application.rb` respectively, matching one-file-per-upstream-file.
+Every user-facing component upstream has a counterpart file on `ruby`, and the
+translation surface that used to be the one whole-surface gap is now ported:
+`lib/constrict/i18n.rb` implements `_()`, `ngettext()` and `C_()` by reading
+the `.po` catalogues directly (no `bindtextdomain`/`dgettext` in the Ruby GLib
+bindings, so the gem ships the catalogues and parses them itself), and every
+call site across `lib/constrict/*.rb` (window, sources_row, current_attempt_box,
+attempt_fail_box, preferences_dialog, error_dialog, shortcuts_dialog,
+application, sources_list_box, drag_overlay, shared, constrict_utils — 127
+call sites in total) uses it. The two components built inline upstream — the
+cancel `Adw.AlertDialog` and the `Adw.AboutDialog` — stayed inline in the
+port, in `window.rb` and `application.rb` respectively, matching
+one-file-per-upstream-file.
+
+No whole-surface gap remains. What is left (see **Open questions** below) is
+verification, not missing ports: confirming the thumbnail path's native
+dependencies (`Gly`/`GlyGtk4`, `gst-video-thumbnailer`) actually resolve in
+the dev shell, and running the app end to end with `ruby-gtk-testing`.
 
 ---
 
@@ -356,7 +368,7 @@ Port target: `lib/constrict/shortcuts_dialog.rb` — **exists (63 lines)**, with
 | `src/constrict_cli.py` | `lib/constrict/cli.rb` | CLI | **yes** (233 lines) | `-i -s -t -o --framerate --extra-quality --codec --software-encode` plus terminal progress output |
 | `src/constrict.gresource.xml.in` | n/a — plus an icon search path | GResource manifest | **n/a** | the 10 `.ui` entries have no Ruby equivalent (widgets are built in code); the 10 icon entries are served from `data/icons/` |
 | `data/icons/scalable/actions/*.svg` | `data/icons/hicolor/scalable/actions/` + `Gtk::IconTheme#add_search_path` | assets | **yes** (all 10) | `video-encoder`, `error-outline`, `broken-video`, `exclamation-mark`, `warning-outline`, `check-plain`, `arrow2-down`, `arrow2-up`, `list-drag-handle`, `help-about` |
-| `po/*.po` (30 languages), `po/LINGUAS`, `po/POTFILES.in` | `po/` + `lib/constrict/i18n.rb` | translations | **no — the one outstanding gap** | upstream marks strings in 11 `.py`/`.blp` files plus the desktop, metainfo and gschema files, with `ngettext` in 4 places and `C_` in one. The port has no `po/` directory and no gettext wiring; strings are English literals |
+| `po/*.po` (30 languages), `po/LINGUAS`, `po/POTFILES.in` | `po/` + `lib/constrict/i18n.rb` | translations | **yes** (30 catalogues carried as-is; `i18n.rb` is 352 lines) | upstream marks strings in 11 `.py`/`.blp` files plus the desktop, metainfo and gschema files, with `ngettext` in 4 places and `C_` in one (the `shortcut window` context in `shortcuts-dialog.blp`). The port reads the `.po` files itself — parsing `msgid`/`msgstr`, plural-form headers and `msgctxt` — rather than going through `bindtextdomain`/`dgettext`, which the Ruby GLib bindings do not wrap |
 
 ---
 
@@ -377,9 +389,14 @@ Port target: `lib/constrict/shortcuts_dialog.rb` — **exists (63 lines)**, with
 5. **`app.shortcuts` does not exist upstream** — the port installs it, so the
    `primary_menu` item and `shortcuts-dialog.blp` are both live. This is a
    deliberate extra, not a divergence to correct.
-6. **Translation (still open).** The only whole surface with no port: no `po/`
-   directory, no `lib/constrict/i18n.rb`, no `ngettext`/`C_` equivalents. The
+6. **Translation — resolved.** `lib/constrict/i18n.rb` ports `po/` directly:
+   `_()`, `ngettext()` and `C_()` read the shipped `.po` catalogues and
+   evaluate each one's `Plural-Forms` expression (guarded by
+   `SAFE_PLURAL_EXPRESSION`) rather than going through libc gettext. The
    pluralised window titles, the four-branch ETA ladder in
    `current_attempt_box.rb`, and the `shortcut window` gettext context in
-   `shortcuts_dialog.rb` are the three places where this is more than a string
-   swap.
+   `shortcuts_dialog.rb` — the three places that were more than a string
+   swap — are all wired to it. Not yet independently verified: that every one
+   of the 30 catalogues actually resolves a translated string back correctly
+   (vs. falling through to the English literal) — worth a spot check with
+   `ruby-gtk-testing` under a non-English `LANG`.
