@@ -96,6 +96,14 @@ Gem::Specification.new do |spec|
   spec.executables = ["constrict", "constrict-cli"]
   spec.require_paths = ["lib"]
 
+  # Runtime: the GTK4/Libadwaita toolkit itself, plus the sandboxed image
+  # loader this app's thumbnailing uses instead of a hand-rolled GdkPixbuf path.
+  spec.add_dependency("adwaita")
+  spec.add_dependency("glib2")
+  spec.add_dependency("glycin")
+  spec.add_dependency("gtk4")
+  spec.add_dependency("libglycin-gtk4")
+
   # NOTE: It is preferable to list development dependencies in the gemspec due to increased
   #       visibility and discoverability.
   #       However, development dependencies in gemspec will install on

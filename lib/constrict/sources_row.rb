@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "adwaita"
+require "glycin"
+require "libglycin_gtk4"
 
 require_relative "attempt_fail_box"
 require_relative "constrict_utils"
@@ -635,47 +637,56 @@ module Constrict
       end
 
       # Runs the system video thumbnailer into the temp directory, named by the
-      # file's hash, and shows the result. Any step that fails falls back to a
-      # generic icon.
+      # file's hash, decodes the result through glycin, and shows it as a
+      # paintable. Any step that fails falls back to a generic icon.
       def set_thumbnail(file_hash, daemon)
         generic_icon = "video-x-generic"
         if @mime_type == "image/gif"
           generic_icon = "image-x-generic"
         end
 
-        thumbnail_path(file_hash).then do |path|
-          if path && File.exist?(path)
-            Shared.update_ui(daemon) { thumbnail.file = path }
-          else
-            Shared.update_ui(daemon) { thumbnail.icon_name = generic_icon }
-          end
+        texture = thumbnail_texture(file_hash)
+
+        if texture
+          Shared.update_ui(daemon) { thumbnail.paintable = texture }
+        else
+          Shared.update_ui(daemon) { thumbnail.icon_name = generic_icon }
         end
       end
 
-      def thumbnail_path(file_hash)
+      def thumbnail_texture(file_hash)
         thumbnailer = GLib.find_program_in_path("gst-video-thumbnailer")
 
         Shared.tmp_dir.then do |tmp_dir|
           if thumbnailer && tmp_dir
-            File.join(tmp_dir, "#{file_hash}.jpg").then do |path|
-              system(
+            texture_from_thumbnail(thumbnailer, tmp_dir, file_hash)
+          end
+        end
+      end
 
-                thumbnailer,
-                "-p",
+      def texture_from_thumbnail(thumbnailer, tmp_dir, file_hash)
+        File.join(tmp_dir, "#{file_hash}.jpg").then do |path|
+          system(
+            thumbnailer,
+            "-p",
+            @video_path,
+            "-s",
+            "128",
+            "-o",
+            path,
+            out: File::NULL,
+            err: File::NULL,
+          )
 
-                @video_path,
-                "-s",
+          texture_from_file(path)
+        end
+      end
 
-                "128",
-                "-o",
-
-                path,
-                out: File::NULL,
-                err: File::NULL,
-
-              )
-              path
-            end
+      def texture_from_file(path)
+        Gio::File.new_for_path(path).then do |file|
+          if file.query_exists
+            frame = Gly::Loader.new(file).load&.next_frame
+            frame && GlyGtk4.frame_get_texture(frame)
           end
         end
       end

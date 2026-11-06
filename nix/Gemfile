@@ -9,4 +9,7 @@
 source "https://rubygems.org"
 
 gem "adwaita"
+gem "glib2"
+gem "glycin"
 gem "gtk4"
+gem "libglycin-gtk4"
