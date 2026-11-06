@@ -1,402 +1,68 @@
-# Constrict — upstream component inventory
-
-Upstream: `origin/main` (Python + PyGObject + blueprint, GTK4 / libadwaita 1).
-Port: the `ruby` branch, `lib/`.
-
-Upstream splits almost every component across two files — a `.blp` holding the
-widget tree, CSS classes and signal names, and a `.py` holding the subclass,
-the `Gtk.Template.Child`s and the callbacks. Both halves map to **one**
-`lib/*.rb` file in the port, so the sections below union them.
-
-Read in the order a user meets the app: application, window, the queue's list
-box and rows, the progress popover's three boxes, then the dialogs, then the
-non-widget support files.
-
-## Target path convention
-
-The pilot port (`gnome-contacts-rb`) is a flat `lib/<thing>.rb` with top-level
-classes. `Constrict-rb` is packaged as a gem: `spec.require_paths = ["lib"]`,
-`exe/constrict` does `require "constrict"`, and the one widget file that
-already exists is `lib/constrict/application.rb` under `module Constrict`.
-This inventory therefore targets `lib/constrict/<thing>.rb`, keeping the
-existing namespace rather than contradicting the file that is already on the
-branch. See **Open questions** below.
-
-## Totals
-
-Counted on upstream `origin/main` and on the `ruby` branch as of commit
-`d124914` ("Port the translations and the gettext call sites"), the current
-tip of `ruby` as of this update — every widget file plus translations are
-landed.
-
-| | Upstream | `ruby` branch |
-|---|---:|---:|
-| Component files (widget-bearing) | 12 | 12 |
-| Blueprint template roots | 10 (9 `template`, 1 named root) | n/a by design |
-| Distinct GTK/Adw widget types | 38 | 65 referenced `Gtk::`/`Adwaita::` constants |
-| Distinct CSS classes applied | 20 | 20 |
-| Menu models | 2 (`primary_menu`, `row_actions`) | 2 |
-| Installed actions | 18 | 18 (11 app/win + 5 `row.*` + `dialog.copy-details` + `app.shortcuts`) |
-| Accelerators | 6 | 7 (upstream's 6 plus `app.shortcuts`) |
-| GSettings keys | 11 (+2 enums) | 11 (+2 enums), in `lib/constrict/settings.rb` |
-| Custom icons | 10 symbolic SVGs | 10, under `data/icons/hicolor/scalable/actions/` |
-| Translation catalogues | 30 `po/*.po` | 30, carried into the gem's `po/` directory and read by `lib/constrict/i18n.rb` (352 lines) |
-
-Every user-facing component upstream has a counterpart file on `ruby`, and the
-translation surface that used to be the one whole-surface gap is now ported:
-`lib/constrict/i18n.rb` implements `_()`, `ngettext()` and `C_()` by reading
-the `.po` catalogues directly (no `bindtextdomain`/`dgettext` in the Ruby GLib
-bindings, so the gem ships the catalogues and parses them itself), and every
-call site across `lib/constrict/*.rb` (window, sources_row, current_attempt_box,
-attempt_fail_box, preferences_dialog, error_dialog, shortcuts_dialog,
-application, sources_list_box, drag_overlay, shared, constrict_utils — 127
-call sites in total) uses it. The two components built inline upstream — the
-cancel `Adw.AlertDialog` and the `Adw.AboutDialog` — stayed inline in the
-port, in `window.rb` and `application.rb` respectively, matching
-one-file-per-upstream-file.
-
-No whole-surface gap remains. What is left (see **Open questions** below) is
-verification, not missing ports: confirming the thumbnail path's native
-dependencies (`Gly`/`GlyGtk4`, `gst-video-thumbnailer`) actually resolve in
-the dev shell, and running the app end to end with `ruby-gtk-testing`.
-
----
-
-## src/main.py — the application: actions, accelerators, About, notifications
-
-Not a widget class, but it owns the whole action surface.
-
-| Item | Detail |
-|---|---|
-| Class | `ConstrictApplication(Adw.Application)`, id `io.github.wartybix.Constrict`, flags `HANDLES_OPEN` |
-| Main option | `--new-window` / `-n` |
-| Actions | `app.new-window`, `app.quit`, `app.about`, `app.preferences`, `app.open-dir` (param `s`), `app.focus-window` (param `i`) |
-| Accelerators | `app.new-window` `<primary>n`; `app.quit` `<primary>q`; `app.preferences` `<primary>comma`; `win.toggle-sidebar` `F9`; `win.open` `<Ctrl>o`; `win.export` `<Ctrl>e`; `win.close` `<Ctrl>w` |
-| Widgets | `Adw.AboutDialog` (built with `new_from_appdata`, three acknowledgement sections, developers, artists, copyright, translator-credits), `Gtk.FileLauncher` (`app.open-dir`) |
-| CSS | `devel` added to the window when the app id ends `.Devel` |
-| Notes | `quit` is overridden to close each window in turn so a compressing window can show its cancel dialog. `do_open` stages the files it is handed. |
-
-Port target: `lib/constrict/application.rb` — **exists (213 lines).** The About dialog
-stayed inline here, as upstream has it. `app.shortcuts` is installed, which
-upstream never does.
-
-## src/window.blp + src/window.py — the main window, both of its pages
-
-`template $ConstrictWindow: Adw.ApplicationWindow`, 1000×700, min 360×294.
-This is by far the largest unit: two `Adw.ViewStackPage`s inside one
-`Adw.ViewStack`, each with its own header bar and its own drop target.
-
-### Chrome
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Adw.ApplicationWindow` | 1 | `devel` (conditional) | `close-request` overridden | `do_close_request` shows the cancel dialog while compressing |
-| `Adw.Breakpoint` | 1 | — | `max-width: 750sp` | sets `split_view.collapsed`, `max-sidebar-width: 300`, reveals `show_sidebar_button`, and enables `win.toggle-sidebar` |
-| `Adw.ToastOverlay` | 1 | — | hosts 4 distinct toasts | see Toasts below |
-| `Adw.ViewStack` | 1 | — | — | pages `status_page`, `queue_page` |
-| `Adw.ToolbarView` | 3 | — | — | status page, sidebar, queue content |
-| `Adw.HeaderBar` | 3 | — | — | |
-| `Adw.WindowTitle` | 3 | — | — | two static, `main_view_title` dynamic |
-| `Gtk.MenuButton` (primary) | 2 | — | `menu-model: primary_menu` | `open-menu-symbolic`, tooltip "Main Menu" |
-| `menu primary_menu` | 1 | — | 4 items | `app.new-window`; `app.preferences`, `app.shortcuts`, `app.about` |
-
-Note `primary_menu` targets **`app.shortcuts`**, which `main.py` never
-installs — the shortcuts dialog is reachable from the menu only if that action
-is added. The port must install it (see `shortcuts-dialog.blp`).
-
-### Empty state — `status_page` page
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Gtk.Overlay` | 1 | — | — | |
-| `Gtk.ProgressBar` `status_progress_bar` | 1 | `osd` | `set_fraction` while staging | `valign: start` |
-| `$DragOverlay` | 1 | — | — | composite, see `drag_overlay.blp` |
-| `Adw.StatusPage` | 1 | `drop-widget` | — | `video-encoder-symbolic`, "Compress Videos" / "Drag and drop videos here" |
-| `Gtk.DropTarget` `drop_target` | 1 | — | `drop => on_drop` | formats `GdkFileList`, actions `copy` |
-| `Gtk.Button` | 1 | `pill`, `suggested-action` | `action-name: win.open` | "_Open…", `can-shrink` |
-
-### Settings sidebar — `queue_page` page, `[sidebar]`
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Adw.OverlaySplitView` `split_view` | 1 | — | `show-sidebar` bound bidirectional to `show_sidebar_button.active` | min 300 / max 360 |
-| `Adw.PreferencesPage` | 1 | — | — | |
-| `Adw.PreferencesGroup` | 4 | — | — | untitled, "Framerate Limit", "Encoding Options", "Advanced Options" |
-| `Adw.SpinRow` `target_size_row` | 1 | — | adjustment `value-changed` → `refresh_previews` | title "Target _Size (MiB)", adjustment 1–999999 step 1 page 10 default 10 |
-| `Gtk.MenuButton` (help) | 3 | `flat` | `popover show` → `announce(...)` | `help-about-symbolic`, tooltip "More Information" |
-| `Gtk.Popover` | 3 | — | `show` | fps / encoding / advanced help |
-| `Gtk.Label` (help body) | 3 | — | — | wrap, `max-width-chars` 30 / 30 / 50; text set in `__init__` |
-| `Adw.ActionRow` | 3 | — | `activatable-widget` | "_Automatic", "_30 FPS", "_60 FPS" (titles formatted from `'{} FPS'`) with subtitles |
-| `Gtk.CheckButton` | 3 | — | `toggled` → `refresh_previews` | one radio group, `auto_check_button` is the group leader and starts active |
-| `Adw.ComboRow` `codec_dropdown` | 1 | — | `notify::selected` → `refresh_previews` | `Gtk.StringList` ["H.264", "H.265 (HEVC)", "AV1", "VP9"] |
-| `Adw.SwitchRow` `extra_quality_toggle` | 1 | — | `notify::active` → `refresh_previews` | "Extra _Quality" |
-| `Adw.SpinRow` `tolerance_row` | 1 | — | adjustment `value-changed` → `refresh_previews` | "_Tolerance (%)", 5–100, schema default 25 |
-
-`Gtk.Adjustment` ×2 (`target_size_input`, `tolerance_input`) are types, not
-widgets, but both are settings-bound and signal-connected.
-
-### Queue content — `queue_page` page, `[content]`
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Gtk.ToggleButton` `show_sidebar_button` | 1 | — | drives `split_view.show-sidebar` | `sidebar-show-symbolic`, "Toggle Settings Pane", active, hidden until the breakpoint |
-| `Adw.Banner` `warning_banner` | 1 | — | `set_revealed` from `set_warning_state` | "Issues with video sources — fix before compressing"; announced to the screen reader when revealed |
-| `Gtk.Overlay` | 1 | — | — | |
-| `Gtk.ProgressBar` `queue_page_progress_bar` | 1 | `osd` | `set_fraction` | |
-| `$DragOverlay` | 1 | `drop-widget` | — | second instance |
-| `Gtk.DropTarget` `drop_target_queue` | 1 | — | `drop => on_drop` | actions flipped to `NONE` while locked |
-| `Adw.PreferencesPage` / `Adw.PreferencesGroup` | 1 / 1 | — | — | group title "Video Sources" |
-| `Gtk.Button` `clear_all_button` | 1 | `flat` | `action-name: win.clear_all` | "_Clear All", header-suffix |
-| `$SourcesListBox` | 1 | — | — | composite, see below |
-| `Gtk.ActionBar` `export_bar` | 1 | — | — | `[bottom]` |
-| `Gtk.Button` `export_button` | 1 | `pill`, `suggested-action` | `action-name: win.export` | "_Export To…" |
-| `Gtk.ActionBar` `cancel_bar` | 1 | — | — | `[bottom]`, hidden until compressing |
-| `Gtk.Button` `cancel_button` | 1 | `pill` | `action-name: win.cancel` | "_Cancel…" |
-
-### Window actions, dialogs, states
-
-| Item | Detail |
-|---|---|
-| Actions | `win.toggle-sidebar` (starts disabled, enabled by the breakpoint setter), `win.open`, `win.export` (enabled only when sources exist and none are broken/incompatible, disabled when all complete), `win.cancel`, `win.clear_all`, `win.close` |
-| File dialogs | `Gtk.FileDialog.open_multiple` with a `Gtk.FileFilter` for `video/*` + `image/gif`, title "Pick Videos", initial folder from `open-initial-folder`; `Gtk.FileDialog.select_folder` for export, initial folder from `export-initial-folder` |
-| Cancel dialog | `Adw.AlertDialog` "Stop Compression?" / "Progress made compressing “{}” will be permanently lost", responses `cancel` "_Cancel" and `stop` "_Stop" with `DESTRUCTIVE` appearance; a `quit_on_stop` flag closes the window after stopping |
-| Toasts | "Error compressing “{}”" with a "View _Details" button → `ErrorDialog`; "Compression complete"; "Unknown video format “{}”" (one per unsupported mime) |
-| Notification | `Gio.Notification` "Compression Complete", category `transfer.complete`, singular/plural bodies, default action `app.focus-window` with the window id, button "Open Export Directory" → `app.open-dir`; withdrawn on close and on any settings change |
-| Titles | three forms queued (none / one / n) and two forms compressing (one / `{index}/{total}`), each `ngettext`-pluralised; subtitle "Exporting to {dir}" with `~` substituted for `$HOME` |
-| Session inhibit | `Gtk.ApplicationInhibitFlags.SUSPEND | LOGOUT`, reason "Videos are being compressed" |
-| Settings bound | `window-width`, `window-height`, `window-maximized`, `target-size`, `extra-quality`, `tolerance` (all `GET | GET_NO_CHANGES`); `fps-mode` and `video-codec` read as enums; all written back in `save_window_state` |
-| Controls lock | `set_controls_lock` desensitises the 7 setting rows, disables `win.clear_all` / `win.open` / `win.export`, locks the list box and kills the queue drop target |
-| Repeaters | the staging loop builds one `SourcesRow` per accepted file; the compression loop builds one `CurrentAttemptBox` per video and N `AttemptFailBox`es per video |
-| Conditional | `warning_banner` revealed only in a warning state; `cancel_bar`/`export_bar` swap on compressing; the sidebar auto-collapses when the queue empties; `view_stack` flips to `status_page` when the last source is removed |
-
-Port target: `lib/constrict/window.rb` — **exists (1370 lines, the largest file in
-the port).** The cancel `Adw.AlertDialog` stayed inline, as upstream has it.
-
-## src/sources_list_box.blp + src/sources_list_box.py — the queue list
-
-`template $SourcesListBox: Gtk.ListBox`, `selection-mode: none`.
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Gtk.ListBox` | 1 | `boxed-list` | — | |
-| `Adw.ButtonRow` `add_videos_button` | 1 | — | `action-name: win.open` | `list-add-symbolic`, "Add Vide_os…"; always the last row, and `get_length` is defined as its index |
-
-Behaviour: `remove`/`remove_all` keep the button row; `add_sources` inserts
-before it; `move` is remove-then-insert; `update_rows` runs per row and sets
-`set_draggable(length > 1 && !locked)`, reveals the drag handle, and enables or
-disables `row.move-up` (not first), `row.move-down` (not last) and `row.remove`
-(not locked). A `locked` flag mirrors the window's controls lock.
-
-Port target: `lib/constrict/sources_list_box.rb` — **exists (118 lines).**
-
-## src/sources_row.blp + src/sources_row.py — one video in the queue
-
-`template $SourcesRow: Adw.ActionRow`. The densest component in the app: seven
-mutually exclusive suffix widgets driven by a seven-value state machine.
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Adw.ActionRow` | 1 | — | `install_action` ×5 | `title-lines: 2`, `subtitle-lines: 1`, not selectable; title is the display name, subtitle is the `1080p@60 → 720p@30` preview (reversed for RTL) |
-| `Gtk.Image` `thumbnail` | 1 | `icon-dropshadow` | — | `image-loading` → `gst-video-thumbnailer` texture via `Gly`/`GlyGtk4`, falling back to `video-x-generic` or `image-x-generic` |
-| `Gtk.Revealer` `drag_handle_revealer` | 1 | — | `reveal-child` | `slide_right` |
-| `Gtk.Image` (drag handle) | 1 | `drag-handle` | — | `list-drag-handle-symbolic` |
-| `Gtk.Button` `error_icon` | 1 | `error`, `flat` | `action-name: row.on-error` | `error-outline-symbolic`, "View Error Details", hidden unless state `ERROR` |
-| `Gtk.MenuButton` `video_broken_button` | 1 | `error`, `flat` | popover `show` → `announce` | `broken-video-symbolic`, hidden unless `BROKEN` |
-| `Gtk.Popover` + `Gtk.Label` (broken) | 1 + 1 | — | — | "Cannot load video. It may be missing or corrupted." |
-| `Gtk.MenuButton` `incompatible_button` | 1 | **dynamic**: `["flat","error"]` when incompatible, `["flat","warning"]` when warning | popover `show` → `announce` | icon flips `exclamation-mark-symbolic` / `warning-outline-symbolic`, tooltip flips "View Error Details" / "More Information" |
-| `Gtk.Popover` + `Gtk.Label` (incompatible) | 1 + 1 | — | — | text set by `set_incompatible` or `set_warning` |
-| `Gtk.MenuButton` `progress_button` | 1 | `flat` | popover `show` → `announce` | "View Compression Progress", hidden unless `COMPRESSING` |
-| `$ProgressPie` `progress_pie` | 1 | — | `set_fraction` | 16×16 |
-| `Adw.Spinner` `progress_spinner` | 1 | — | — | 16×16, swapped in for the pie during VP9 analysis |
-| `Gtk.Popover` `progress_popover` + `Gtk.ScrolledWindow` | 1 + 1 | — | `popdown` on completion | hosts `$ProgressPopoverBox` |
-| `Gtk.MenuButton` `complete_button` | 1 | `success`, `flat` | popover `show` → `announce` | `check-plain-symbolic`, "More Details", hidden unless `COMPLETE` |
-| `Gtk.Popover` + `Gtk.Box` + `Gtk.Label` (complete) | 1+1+1 | — | — | "Video compressed to {size} MiB." |
-| `Gtk.Button` (show file) | 1 | — | `action-name: row.find-compressed-file` | "Show File Location" → `Gtk.FileLauncher.open_containing_folder` |
-| `Gtk.MenuButton` `menu_button` | 1 | `flat` | `menu-model: row_actions` | `view-more-symbolic`, "View More" |
-| `menu row_actions` | 1 | — | 3 items | "Move _Up" `row.move-up`, "Move _Down" `row.move-down`, "_Remove" `row.remove` |
-
-Controllers (behaviour, not widgets): `Gtk.DragSource` `drag_source` —
-`prepare => on_drag_prepare`, `drag-begin => on_drag_begin`, propagation phase
-toggled `CAPTURE`/`NONE` by `set_draggable`; `Gtk.DropTarget` — actions `move`,
-format `SourcesRow`, `preload`, `motion => on_motion`, `drop => on_drop`.
-`on_drag_begin` builds a throwaway `Gtk.ListBox` holding a second `SourcesRow`
-as the `Gtk.DragIcon` child — a repeater the scan cannot see.
-
-Actions installed: `row.move-up`, `row.move-down`, `row.on-error`,
-`row.find-compressed-file`, `row.remove`.
-
-States (`SourceState`): `PENDING`, `COMPRESSING`, `COMPLETE`, `ERROR`,
-`BROKEN`, `INCOMPATIBLE`, `WARN`. `BROKEN` and `INCOMPATIBLE` additionally
-fire the window's warning action, which blocks export; `WARN` does not.
-
-Port target: `lib/constrict/sources_row.rb` — **exists (805 lines).**
-
-## src/progress_pie.py — the circular progress indicator
-
-No blueprint; built in code. `class ProgressPie(Gtk.DrawingArea)`, centred
-both ways, with a `set_draw_func` that paints a background disc at alpha 0.15
-and a foreground pie wedge from −90° using the widget's own `get_color()`.
-`set_fraction` stores and queues a redraw.
-
-Port target: `lib/constrict/progress_pie.rb` — **exists (91 lines)**, drawing through
-the Ruby Cairo bindings rather than a Python `cairo.Context`.
-
-## src/progress_popover_box.blp + src/progress_popover_box.py — the progress popover body
-
-`template $ProgressPopoverBox: Gtk.Box`, vertical, nothing else declared. One
-`CurrentAttemptBox` is prepended as `top_widget`, and each `AttemptFailBox` is
-inserted after it. `get_message` concatenates every child's labels with
-`'... '` for the screen reader.
-
-Port target: `lib/constrict/progress_popover_box.rb` — **exists (68 lines).**
-
-## src/current_attempt_box.blp + src/current_attempt_box.py — the running attempt
-
-`template $CurrentAttemptBox: Gtk.Box`, vertical, 6px margins. Design
-acknowledged from Nautilus' progress info widget.
-
-| Widget | × | CSS | Notes |
-|---|---:|---|---|
-| `Gtk.Label` `attempt_label` | 1 | `heading` | "Attempt {n}" |
-| `Gtk.Label` `target_details_label` | 1 | — | "Initializing…" → "Compressing to {kbps} kbps ({res}p@{fps}, HQ/LQ audio)", `ellipsize: start`, 300px request |
-| `Gtk.ProgressBar` `progress_bar` | 1 | — | `set_fraction`, or `pulse` during VP9 analysis |
-| `Gtk.Label` `progress_details_label` | 1 | `dim-label`, `numeric` | "0 %" → "{n} %", "{n} % — Almost done", or "{n} % — About {time} left" |
-
-The ETA string is a four-branch, `ngettext`-pluralised ladder (seconds; minutes;
-hours + minutes under 4h; hours only above) — a translation surface in its own
-right.
-
-Port target: `lib/constrict/current_attempt_box.rb` — **exists (180 lines).**
-
-## src/attempt_fail_box.blp + src/attempt_fail_box.py — one failed attempt
-
-`template $AttemptFailBox: Gtk.Box`, vertical, `hexpand`.
-
-| Widget | × | CSS | Notes |
-|---|---:|---|---|
-| `Gtk.Separator` | 1 | — | |
-| `Gtk.Box` | 2 | — | outer vertical, inner horizontal 300px |
-| `Gtk.Label` `attempt_label` | 1 | `heading` | "Attempt {n}" |
-| `Gtk.Label` `target_label` | 1 | `dimmed` | "{kbps} kbps ({res}p@{fps}, HQ/LQ audio)" |
-| `Gtk.Image` `failure_icon` | 1 | — | `arrow2-up-symbolic` when too large, `arrow2-down-symbolic` when too small |
-| `Gtk.Label` `failure_details_label` | 1 | — | "Compressed file size was too large/small ({size} MiB)", wrap `word_char`, 40 chars |
-
-Port target: `lib/constrict/attempt_fail_box.rb` — **exists (147 lines).**
-
-## src/drag_overlay.blp + src/drag_overlay.py — the drop-hint overlay
-
-`template $DragOverlay: Adw.Bin`. Design acknowledged from Loupe. Used twice
-(status page and queue page).
-
-| Widget | × | CSS | Notes |
-|---|---:|---|---|
-| `Adw.Bin` (template) | 1 | — | exposes `child` and `drop_target` as GObject properties |
-| `Gtk.Overlay` `overlay` | 1 | — | `child` property proxies to it |
-| `Gtk.Revealer` `revealer` | 1 | — | `CROSSFADE`, `can-target: false`, revealed by `notify::current-drop` on the assigned drop target |
-| `Adw.Bin` | 1 | `background` | |
-| `Adw.StatusPage` | 1 | `overlay-status` | "Drop Videos to Import", `video-x-generic-symbolic` |
-
-Port target: `lib/constrict/drag_overlay.rb` — **exists (82 lines).** The two custom
-properties (`child`, `drop_target`) are handled as plain accessors rather than
-GObject properties.
-
-## src/error_dialog.blp + src/error_dialog.py — compression error details
-
-`template $ErrorDialog: Adw.Dialog`, 600×450, title "Compression Error".
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Adw.Dialog` | 1 | — | `install_action('dialog.copy-details')` | |
-| `Adw.ToolbarView` + `Adw.HeaderBar` | 1 + 1 | — | — | |
-| `Adw.ToastOverlay` | 1 | — | — | hosts "Details copied to clipboard" |
-| `Adw.PreferencesPage` `preference_page` | 1 | — | — | description "There was a problem compressing “{}”", markup-escaped |
-| `Adw.PreferencesGroup` | 1 | — | — | title "Details" |
-| `Gtk.Button` `copy_button` | 1 | `flat` | `action-name: dialog.copy-details` | `edit-copy-symbolic`, "Copy Details" |
-| `Gtk.ScrolledWindow` | 1 | `card` | — | `overflow: hidden`, `vexpand` |
-| `Gtk.TextView` `text_view` | 1 | `monospace`, `inline` | — | read-only, 12px margins, `word_char` wrap; buffer holds the ffmpeg error text |
-
-Port target: `lib/constrict/error_dialog.rb` — **exists (118 lines).**
-
-## src/preferences_dialog.blp + src/preferences_dialog.py — preferences
-
-`template $PreferencesDialog: Adw.PreferencesDialog`, title "Preferences",
-`content-height: 425`.
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Adw.PreferencesDialog` | 1 | — | — | shows its own toast "Changes applied" |
-| `Adw.PreferencesPage` | 1 | — | — | |
-| `Adw.PreferencesGroup` `hw_accel_group` | 1 | — | — | "Hardware Acceleration" + a long description mentioning 360p |
-| `Adw.SwitchRow` `gpu_encoding_row` | 1 | — | bound to `use-gpu-encoding` (`DEFAULT`) | "GPU Encoding" |
-| `Adw.PreferencesGroup` `suffix_group` | 1 | — | — | "Exported Video Suffix" + a description naming the default suffix |
-| `Adw.EntryRow` `suffix_entry_row` | 1 | — | `apply` → writes `custom-export-suffix` | `show-apply-button`, "Custom Suffix" |
-
-The default suffix is `" (compressed)"`, built on the application and
-translated; both this dialog and the export path read it.
-
-Port target: `lib/constrict/preferences_dialog.rb` — **exists (102 lines).**
-
-## src/gtk/shortcuts-dialog.blp — the keyboard shortcuts dialog
-
-A standalone blueprint with **no backing Python file** and a named root rather
-than a `template`: `Adw.ShortcutsDialog shortcuts_dialog`. Nothing on
-`origin/main` loads it and no `app.shortcuts` action exists, although
-`primary_menu` points at one — so the port both ports the dialog and installs
-the action.
-
-| Section | Items (`Adw.ShortcutsItem`) |
-|---|---|
-| "Video Management" | Open → `win.open`; Export → `win.export` |
-| "General" | Toggle Settings Pane → `win.toggle-sidebar`; Show Shortcuts → `app.shortcuts`; Close Window → `win.close`; Quit → `app.quit`; Show Preferences → `app.preferences` |
-
-Titles use the `shortcut window` gettext context (`C_(...)`).
-
-Port target: `lib/constrict/shortcuts_dialog.rb` — **exists (63 lines)**, with the
-`app.shortcuts` action installed in `application.rb` so the menu item works.
-
----
-
-## Non-widget files that the components depend on
-
-| Upstream | Port target | Kind | Present | Notes |
+# Component inventory — Constrict (upstream `origin/main`) vs. `lib/` on `ruby`
+
+Scope: every user-facing component (windows, dialogs, pages, rows, menus,
+keyboard shortcuts, actions, empty/error states) in upstream's `src/` and
+`src/gtk/`, plus the supporting `.blp` files, GSettings schema, GResource
+manifest and `po/` catalogue. Upstream is Python + blueprint
+(`src/*.py` + `src/*.blp`, compiled to `.ui`/GResource at build time); the
+port builds the same widget trees directly in Ruby with no `.ui`/GResource
+step, per the house style.
+
+Order follows how a user meets the app: main window → status page → queue
+page (sidebar + sources list + row) → dialogs → shortcuts → supporting
+infrastructure (settings, style, i18n, CLI).
+
+## Summary
+
+Every upstream component file already has a corresponding `lib/constrict/*.rb`
+file on `ruby`, and a reading of each port file shows the widgets, actions and
+menus from the matching upstream file/blueprint pair are present. No new
+component file is needed; this report is the inventory the task asked for,
+not a parity bug list (that is `component-parity`'s job).
+
+## Components
+
+| # | Upstream file(s) | Kind | `lib/*.rb` path | Exists? |
 |---|---|---|---|---|
-| `src/gtk/style.css` | `lib/constrict/style.rb` | stylesheet | **yes** (66 lines, inline CSS via `Gtk::CssProvider`, loaded on `startup`) | defines `.drag-handle`, `.drag-handle:backdrop`, `.overlay-status`, `.overlay-status label`, `.drop-widget`. The other 15 classes in use are stock Adwaita |
-| `data/io.github.wartybix.Constrict.gschema.xml.in` | `lib/constrict/settings.rb` | GSettings schema | **yes** (102 lines) | 11 keys + the `FpsMode` and `VideoCodec` enums. Note `tolerance` defaults to **25** in the schema while the blueprint adjustment says 10, and the advanced-help string interpolates the schema default |
-| `src/enums.py` | `lib/constrict/enums.rb` | enums | **yes** (59 lines) | `FpsMode` (3), `VideoCodec` (4), `SourceState` (7) |
-| `src/shared.py` | `lib/constrict/shared.rb` | helper | **yes** (75 lines) | `get_tmp_dir` and the `update_ui` idle-add shim |
-| `src/constrict_utils.py` | `lib/constrict/constrict_utils.rb` | backend | **yes** (1178 lines, upstream 994) | ffmpeg/ffprobe driver: `compress`, `transcode`, `get_encode_settings`, resolution/framerate/duration/audio probes, `get_progress`, `will_ha_work`, subtitle streams |
-| `src/constrict_cli.py` | `lib/constrict/cli.rb` | CLI | **yes** (233 lines) | `-i -s -t -o --framerate --extra-quality --codec --software-encode` plus terminal progress output |
-| `src/constrict.gresource.xml.in` | n/a — plus an icon search path | GResource manifest | **n/a** | the 10 `.ui` entries have no Ruby equivalent (widgets are built in code); the 10 icon entries are served from `data/icons/` |
-| `data/icons/scalable/actions/*.svg` | `data/icons/hicolor/scalable/actions/` + `Gtk::IconTheme#add_search_path` | assets | **yes** (all 10) | `video-encoder`, `error-outline`, `broken-video`, `exclamation-mark`, `warning-outline`, `check-plain`, `arrow2-down`, `arrow2-up`, `list-drag-handle`, `help-about` |
-| `po/*.po` (30 languages), `po/LINGUAS`, `po/POTFILES.in` | `po/` + `lib/constrict/i18n.rb` | translations | **yes** (30 catalogues carried as-is; `i18n.rb` is 352 lines) | upstream marks strings in 11 `.py`/`.blp` files plus the desktop, metainfo and gschema files, with `ngettext` in 4 places and `C_` in one (the `shortcut window` context in `shortcuts-dialog.blp`). The port reads the `.po` files itself — parsing `msgid`/`msgstr`, plural-form headers and `msgctxt` — rather than going through `bindtextdomain`/`dgettext`, which the Ruby GLib bindings do not wrap |
+| 1 | `src/main.py` | Application (singleton, app actions: `new-window`, `quit`, `about`, `preferences`, `open-dir`, `focus-window`) | `lib/constrict/application.rb` | Yes |
+| 2 | `src/window.blp` + `src/window.py` | Main window (`Adw.ApplicationWindow`): status page, queue page (sidebar settings pane + content pane), breakpoint, toasts, drag-and-drop overlays, menu, export/cancel action bars, window actions (`open`, `export`, `cancel`, `clear_all`, `close`, `toggle-sidebar`) | `lib/constrict/window.rb` | Yes |
+| 3 | `src/drag_overlay.blp` + `src/drag_overlay.py` | Composite widget — drag-and-drop reveal overlay (`Adw.Bin` + `Gtk.Overlay` + `Gtk.Revealer` + `Adw.StatusPage`), used by both the status page and the queue page | `lib/constrict/drag_overlay.rb` | Yes |
+| 4 | `src/sources_list_box.blp` + `src/sources_list_box.py` | List box of staged video sources (`Gtk.ListBox`, boxed-list style) + "Add Videos…" `Adw.ButtonRow` (`win.open`) | `lib/constrict/sources_list_box.rb` | Yes |
+| 5 | `src/sources_row.blp` + `src/sources_row.py` | One source-video row (`Adw.ActionRow`): thumbnail, drag handle, error/broken/incompatible/progress/complete/menu `MenuButton`s + popovers, `row.*` actions (`move-up`, `move-down`, `remove`, `on-error`, `find-compressed-file`), drag source/drop target for reordering | `lib/constrict/sources_row.rb` | Yes |
+| 6 | `src/progress_pie.py` | Custom `Gtk.DrawingArea` subclass — circular progress indicator drawn with Cairo, used inside a source row's progress button | `lib/constrict/progress_pie.rb` | Yes |
+| 7 | `src/progress_popover_box.blp` + `src/progress_popover_box.py` | Popover content box showing the current attempt plus any prior failed attempts for a row | `lib/constrict/progress_popover_box.rb` | Yes |
+| 8 | `src/current_attempt_box.blp` + `src/current_attempt_box.py` | One compression attempt's live progress (heading, target-size label, `Gtk.ProgressBar`, detail label) | `lib/constrict/current_attempt_box.rb` | Yes |
+| 9 | `src/attempt_fail_box.blp` + `src/attempt_fail_box.py` | One failed compression attempt's summary (separator, heading, target label, failure icon + wrapped detail label) | `lib/constrict/attempt_fail_box.rb` | Yes |
+| 10 | `src/error_dialog.blp` + `src/error_dialog.py` | Error detail dialog (`Adw.Dialog`): toast overlay, read-only monospace `Gtk.TextView`, `dialog.copy-details` action | `lib/constrict/error_dialog.rb` | Yes |
+| 11 | `src/preferences_dialog.blp` + `src/preferences_dialog.py` | App preferences dialog (`Adw.PreferencesDialog`): GPU-encoding switch row, custom export-suffix entry row | `lib/constrict/preferences_dialog.rb` | Yes |
+| 12 | `src/gtk/shortcuts-dialog.blp` | Keyboard-shortcuts dialog (`Adw.ShortcutsDialog`): Video Management + General sections, 7 shortcut items | `lib/constrict/shortcuts_dialog.rb` | Yes |
+| 13 | `src/enums.py` | Shared enums (codec, framerate mode, etc.) used across widgets | `lib/constrict/enums.rb` | Yes |
+| 14 | `src/shared.py` | Shared UI helpers (e.g. `update_ui` for cross-thread UI updates) | `lib/constrict/shared.rb` | Yes |
+| 15 | `src/constrict_utils.py` | Video-compression logic/back end (ffmpeg invocation, attempt loop) — not itself a widget, but every row/box above reports its state | `lib/constrict/constrict_utils.rb` | Yes |
+| 16 | `src/constrict_cli.py` | Command-line entry point | `lib/constrict/cli.rb` | Yes |
+| 17 | `data/io.github.wartybix.Constrict.gschema.xml.in` | GSettings schema (target size, framerate mode, codec, extra quality, tolerance, GPU encoding, export suffix, window state) | `lib/constrict/settings.rb` | Yes |
+| 18 | `src/gtk/style.css` | App stylesheet (custom CSS classes: `icon-dropshadow`, `drag-handle`, `drop-widget`, `overlay-status`, `background`, etc.) | `lib/constrict/style.rb` | Yes |
+| 19 | `po/*.po`, `po/LINGUAS`, `po/POTFILES.in` | Translation catalogue + gettext calls throughout `src/*.py` | `lib/constrict/i18n.rb` | Yes |
+| 20 | `data/io.github.wartybix.Constrict.metainfo.xml.in` + about-dialog fields in `src/main.py` (`on_about_action`) | About dialog content (developers, artists, acknowledgement sections, translator credits) | consumed from `lib/constrict/application.rb` (`Adwaita::AboutDialog`) | Yes |
+| 21 | `data/io.github.wartybix.Constrict.desktop.in` | Desktop launcher entry (name, icon, actions) — not an in-app widget | n/a (packaging metadata; no `lib/*.rb` owner expected) | N/A |
+| 22 | `data/io.github.wartybix.Constrict.service.in` | D-Bus service activation file — not an in-app widget | n/a (packaging metadata) | N/A |
+| 23 | `src/constrict.gresource.xml.in` | GResource manifest bundling the `.ui` files — upstream build-time artifact; the port has no `.ui`/GResource step by design | n/a (house style builds widgets directly in Ruby) | N/A |
+| 24 | `data/icons/**/*.svg` | App/action icon assets | n/a (referenced by icon name from the Ruby widgets, not ported as code) | N/A |
 
----
+## Notes
 
-## Open questions — resolved by the port, and what is left
-
-1. **`lib/<thing>.rb` vs `lib/constrict/<thing>.rb`** — resolved as the gem
-   layout, `lib/constrict/<thing>.rb` under `module Constrict`, which is what
-   `exe/constrict` and `lib/constrict.rb` load.
-2. **Components with no upstream file of their own** — resolved by keeping
-   one-file-per-upstream-file: the cancel `Adw.AlertDialog` lives in
-   `window.rb` (`show_cancel_dialog`) and the `Adw.AboutDialog` in
-   `application.rb` (`about_dialog`). No `cancel_dialog.rb` or
-   `about_dialog.rb` was created.
-3. **`update_ui`'s threading model** — resolved in `lib/constrict/shared.rb`.
-4. **Thumbnails depend on `Gly`/`GlyGtk4` and `gst-video-thumbnailer`** — still
-   worth verifying in the dev shell; `sources_row.rb` carries the generic-icon
-   fallback either way.
-5. **`app.shortcuts` does not exist upstream** — the port installs it, so the
-   `primary_menu` item and `shortcuts-dialog.blp` are both live. This is a
-   deliberate extra, not a divergence to correct.
-6. **Translation — resolved.** `lib/constrict/i18n.rb` ports `po/` directly:
-   `_()`, `ngettext()` and `C_()` read the shipped `.po` catalogues and
-   evaluate each one's `Plural-Forms` expression (guarded by
-   `SAFE_PLURAL_EXPRESSION`) rather than going through libc gettext. The
-   pluralised window titles, the four-branch ETA ladder in
-   `current_attempt_box.rb`, and the `shortcut window` gettext context in
-   `shortcuts_dialog.rb` — the three places that were more than a string
-   swap — are all wired to it. Not yet independently verified: that every one
-   of the 30 catalogues actually resolves a translated string back correctly
-   (vs. falling through to the English literal) — worth a spot check with
-   `ruby-gtk-testing` under a non-English `LANG`.
+- Every row with `Yes` was confirmed by reading the corresponding `lib/constrict/*.rb`
+  file and checking it builds the matching widgets/actions/menus from the
+  upstream `.blp`/`.py` pair (e.g. `window.rb`'s `window_actions` map covers
+  `open`, `export`, `cancel`, `clear_all`, `close`, `toggle-sidebar`; `sources_row.rb`
+  is 825 lines and covers every suffix `MenuButton`, the drag source/target,
+  and all five `row.*` actions from `sources_row.blp`).
+- Rows 21–24 are packaging/build artifacts with no on-screen widget tree of
+  their own; they are listed for completeness per the task's instruction to
+  cover GResource manifests, desktop files and icon assets, but have no
+  `lib/*.rb` counterpart to check against.
+- This is a component *inventory*, not a parity verdict: presence of a port
+  file does not by itself prove every CSS class, signal and dynamic behaviour
+  (e.g. the progress pie's drawn arc, the row's drag-reorder motion handler)
+  is byte-for-byte faithful — that finer-grained check is `component-parity`'s
+  job and was out of scope for this survey.
