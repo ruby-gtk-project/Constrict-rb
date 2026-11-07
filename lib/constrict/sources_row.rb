@@ -387,7 +387,7 @@ module Constrict
     def set_complete(compressed_video_path, compressed_size_mb, daemon)
       Shared.update_ui(daemon) do
         complete_label.label = interpolate(
-          _("Video compressed to {size}\u202F{unit}."),
+          _("Video compressed to {size} {unit}."),
           size: compressed_size_mb,
           unit: _("MiB"),
         )
@@ -408,7 +408,7 @@ module Constrict
         elsif video_bitrate < MIN_VIABLE_BITRATE
           set_incompatible(
             interpolate(
-              _("Target size ({size}\u202F{unit}) is too low for this file."),
+              _("Target size ({size} {unit}) is too low for this file."),
               size: target_size,
               unit: _("MiB"),
             ),
@@ -556,9 +556,9 @@ module Constrict
         (size / 1024.0 / 1024.0).round(1).then do |size_mb|
           interpolate(
             _(
-              "Video file size ({original_size}\u202F{unit_original}) " \
+              "Video file size ({original_size} {unit_original}) " \
               "already meets the target size " \
-              "({target_size}\u202F{unit_target}).",
+              "({target_size} {unit_target}).",
             ),
             original_size: size_mb,
             unit_original: _("MiB"),
@@ -689,6 +689,11 @@ module Constrict
             frame && GlyGtk4.frame_get_texture(frame)
           end
         end
+      rescue StandardError
+        # Any format glycin cannot decode (or no loader configured for)
+        # falls back to the generic icon set_thumbnail already picks,
+        # instead of dying silently on the background thread this runs on.
+        nil
       end
 
       def connect_popover_announcements

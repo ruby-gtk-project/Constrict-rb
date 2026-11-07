@@ -84,11 +84,30 @@ def write_fake_mp4(path)
   end
 end
 
+# A real, 1x1 PNG (the shortest valid one: IHDR + a single-pixel IDAT +
+# IEND), so glycin has actual image bytes to decode rather than a format it
+# has to reject. Unlike the video thumbnailer, glycin ships in this dev
+# shell, so this is the one thumbnailing step `DRIVE_DIR` can exercise for
+# real rather than only through its failure path.
+def write_fake_png(path)
+  File.open(path, "wb") do |file|
+    file.write(
+      "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08" \
+      "\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\xdacd\xf8\xff\xbf" \
+      "\x1e\x00\x05\x84\x02\x7f\xc2[\x1e*\x00\x00\x00\x00IEND\xaeB`\x82",
+    )
+  end
+end
+
 DRIVE_DIR = Dir.mktmpdir("constrict-drive-files")
 FAKE_MP4 = File.join(DRIVE_DIR, "holiday.mp4")
 UNSUPPORTED_TXT = File.join(DRIVE_DIR, "notes.txt")
+FAKE_PNG = File.join(DRIVE_DIR, "frame.png")
+CORRUPT_PNG = File.join(DRIVE_DIR, "corrupt.png")
 write_fake_mp4(FAKE_MP4)
 File.write(UNSUPPORTED_TXT, "these are not video bytes")
+write_fake_png(FAKE_PNG)
+File.write(CORRUPT_PNG, "\x89PNG\r\n\x1a\nnot actually a png past the signature")
 
 GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.ConstrictDrive"), shots: SHOTS) do |d, app|
   d.window { app.active_window }
@@ -306,6 +325,50 @@ GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.Constrict
         d.shot("03-row-states", row)
         window.close
       end
+    end
+  end
+
+  # --- 4b. The real thumbnail decode path: glycin/libglycin-gtk4 turning an
+  # actual image file into a paintable (sources_row.rb's texture_from_file,
+  # the binding-gem code path this port's thumbnailer output flows through
+  # once ffmpeg/gst-video-thumbnailer have written a frame to disk — neither
+  # of which exists on this machine, so this step reaches `texture_from_file`
+  # directly with a real PNG rather than through the thumbnailer shell-out
+  # this dev shell cannot run) ------------------------------------------------
+
+  d.step("glycin decodes a real image into a GdkTexture, live") do
+    Constrict::SourcesRow.new(video_path: FAKE_MP4, display_name: "holiday.mp4").then do |row|
+      texture = row.send(:texture_from_file, FAKE_PNG)
+      d.check("a texture came back, not nil") { !texture.nil? }
+      d.check("it is a real Gdk::Texture") { texture.is_a?(Gdk::Texture) }
+      d.check("it decoded the 1x1 pixel's actual dimensions") do
+        texture.width == 1 && texture.height == 1
+      end
+
+      # `set_thumbnail` -> `thumbnail_texture` shells out to
+      # gst-video-thumbnailer before glycin ever sees a file, and this dev
+      # shell has none (see the file's own "Out of scope" note), so that one
+      # link is stubbed to hand `texture_from_file` the real PNG above —
+      # exercising set_thumbnail's own UI-wiring half live, the same way the
+      # file already drives `stage_videos` around ffprobe's absence.
+      row.define_singleton_method(:thumbnail_texture) { |_file_hash| texture_from_file(FAKE_PNG) }
+      row.send(:set_thumbnail, "whatever-hash", false)
+      d.check("set_thumbnail wired a live-decoded texture onto the row's own image") do
+        row.thumbnail.paintable.is_a?(Gdk::Texture) &&
+          row.thumbnail.paintable.width == 1 && row.thumbnail.paintable.height == 1
+      end
+    end
+  end
+
+  d.step("a file glycin cannot decode falls back to the generic icon, not a crash") do
+    Constrict::SourcesRow.new(video_path: FAKE_MP4, display_name: "holiday.mp4").then do |row|
+      d.check("texture_from_file on bad bytes returns nil rather than raising") do
+        row.send(:texture_from_file, CORRUPT_PNG).nil?
+      end
+
+      row.define_singleton_method(:thumbnail_texture) { |_file_hash| texture_from_file(CORRUPT_PNG) }
+      row.send(:set_thumbnail, "whatever-hash", false)
+      d.check("set_thumbnail fell back to the generic icon") { row.thumbnail.icon_name == "video-x-generic" }
     end
   end
 
