@@ -650,21 +650,18 @@ GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.Constrict
     d.check("an id nothing matches opens a third window instead") { app.windows.length == 3 }
   end
 
-  d.step("app.quit closes every window") do
-    app.app_actions.fetch("quit").activate(nil)
-  end
+  # app.quit is driven at the very end of this script, not here: calling
+  # Gio::Application#quit tears down the same GLib main loop this driver's own
+  # GtkDriver::Session#schedule timeout runs on (test/gtk_driver.rb), so any
+  # step registered after the one that calls it never fires — the loop is
+  # already gone. The first version of this file called it here and still
+  # reported "DRIVE OK", because every later step (close-request, the
+  # Settings/Enums/Cli/I18n section, the final empty-again check) silently
+  # never ran: 0 checks recorded is not the same as 0 checks failed. Section 9
+  # below reuses the three windows already open from the steps above instead
+  # of asking for a fresh one.
 
-  d.step("every window closed") do
-    pump(300)
-    d.check("no windows left") { app.windows.empty? }
-  end
-
-  # --- 9. A fresh window for the parts the quit above would otherwise have
-  # torn down ------------------------------------------------------------------
-
-  d.step("app.new-window opens a window again for the remaining checks") do
-    app.app_actions.fetch("new-window").activate(nil)
-  end
+  # --- 9. The window state the three windows above already give us ---------
 
   d.step("close-request saves window state when nothing is compressing") do
     app.active_window.then do |window|
@@ -793,12 +790,18 @@ GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.Constrict
     d.check("English comes back once the environment does") { Constrict::I18n._("Preferences") == "Preferences" }
   end
 
-  d.step("ticking every counter for a clean shutdown") do
-    pump(300)
-    app.windows.each(&:close)
-  end
+  # --- 11. app.quit, driven last because it ends the loop this driver runs on
+  # (see the note above section 9) --------------------------------------------
 
-  d.step("the application is empty again, exactly as it started") do
+  # One step, not two: activating app.quit tears down the very GLib main loop
+  # this driver's own timeout runs on (test/gtk_driver.rb's
+  # GtkDriver::Session#schedule), so a check registered as a *later* step
+  # never gets a tick to run on — the loop that would have called it is
+  # already gone, and that step silently vanishes rather than failing. Pumping
+  # and checking inside this same step, before returning, catches the effect
+  # while the loop this step is running on is still alive to be pumped.
+  d.step("app.quit closes every window") do
+    app.app_actions.fetch("quit").activate(nil)
     pump(300)
     d.check("no windows left") { app.windows.empty? }
   end
