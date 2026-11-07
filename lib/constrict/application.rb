@@ -159,10 +159,14 @@ module Constrict
         end
       end
 
+      # The Ruby bindings unbox a simple GVariant ("s", "i", …) parameter into
+      # its native Ruby value before the "activate" signal reaches this block,
+      # rather than handing over the GLib::Variant itself — so `parameter` is
+      # already the string or integer it carries, with no `#value` to call.
       def parameterised_action(name, type)
         Gio::SimpleAction.new(name, GLib::VariantType.new(type)).tap do |simple_action|
           simple_action.signal_connect("activate") do |_, parameter|
-            yield(parameter.value)
+            yield(parameter)
           end
         end
       end
