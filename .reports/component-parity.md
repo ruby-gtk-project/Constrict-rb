@@ -3,8 +3,20 @@
 | | |
 |---|---|
 | Upstream | `main` @ `ecd8b7d` |
-| Port | `ruby` @ `4ba7d7a` |
-| Units with full parity | 9 / 16 widget units (see below); 2 app-level units carry confirmed gaps; source row carries a new text-axis regression introduced this round (widget/behaviour axis still parity) |
+| Port | `ruby` @ `0b4aa2b` |
+| Units with full parity | 11 / 16 widget units; 1 app-level unit (desktop launcher) carries a confirmed presence gap; main window carries a newly found text-axis gap (two untranslated button labels); the previous round's source-row text regression is fixed |
+
+**This round's changes, verified against current source, not assumed:**
+the `sources_row.rb` narrow-space regression is fixed (restored to
+byte-identical with upstream); the about-dialog msgid rewording is fixed
+and its `comments` field is now set; `ProgressPie`, `ProgressPopoverBox`,
+`AttemptFailBox` and `DragOverlay` are now instantiated and asserted on by
+`test/drive_constrict.rb` (confirmed: 209/209 checks pass, all four appear
+by name in the drive script with real assertions, not placeholder calls —
+re-run in this session). A new gap was found this round that no previous
+round reported: `window.rb`'s `_Export To…`/`_Cancel…` button labels have
+no `_()` wrapper at all. See `translation-parity.md` Gap D for the full
+detail; summarized under the main-window unit below.
 
 ## Method
 
@@ -40,8 +52,20 @@ window.rb:779-786) and the three preference rows under "Advanced
 Options"/"Encoding Options" beyond their mere existence. Minor, noted for
 completeness.
 
-**Verdict: parity**, once the scan's factory/false-positive noise is read
-through. This unit does not deserve the raw scan's apparent 10-widget gap.
+**Verdict: parity** on the widget/behaviour axes, once the scan's
+factory/false-positive noise is read through. This unit does not deserve
+the raw scan's apparent 10-widget gap.
+
+**New this round — text axis, real gap:** `open_button`/`clear_all_button`
+pass through fine, but `export_button` and `cancel_button`
+(`window.rb:341,346`) call `pill_button("_Export To…", "win.export")` and
+`pill_button("_Cancel…", "win.cancel")` with **plain string literals, no
+`_()` wrapper**. `pill_button` (window.rb:735-745) assigns `button.label =
+label` verbatim — nothing downstream translates it either. Upstream wraps
+both (`src/window.blp:347,363`: `label: _("_Export To…");` /
+`label: _("_Cancel…");`). These are the window's two primary action
+buttons — not a rare path — and they will render in English in every
+non-English locale. See `translation-parity.md` Gap D.
 
 ## Unit: source row — `src/sources_row.blp` + `.py` → `lib/constrict/sources_row.rb`
 
@@ -63,42 +87,31 @@ a port counterpart. **Verdict: parity.**
 
 ## Unit: About dialog content — `main.py` (`on_about_action`) + `data/*.metainfo.xml.in` → `lib/constrict/application.rb`
 
-**Gap, confirmed by reading, not by the scan** (the scan does not carry
-string values at all — this is the text axis, and the four-widget axes pass):
+**Both gaps this report previously filed here are now fixed, verified
+against current source:**
 
-1. **Reworded msgid** (text axis — flagged in both this report and
-   `translation-parity.md`). Upstream:
+1. **Acknowledgement msgid — fixed.** `application.rb:36` now holds the
+   template key `"‘{}’ repository by"`, and the call site
+   (`interpolate(_(title), "8mb")`, `application.rb:222`) substitutes
+   `"8mb"` **after** translation, matching upstream's
+   `_('‘{}’ repository by').format('8mb')` exactly, same order.
+2. **`comments` field — fixed.** `application.rb:210` sets `dialog.comments
+   = _("Compress videos to target sizes")`, byte-identical to upstream's
+   metainfo `<summary>`.
 
-   ```python
-   _('‘{}’ repository by').format('8mb')
-   ```
+**Still a gap, narrower than before:** upstream's
+`Adw.AboutDialog.new_from_appdata` also reads the metainfo's long
+`<description>` paragraphs and the "Features include:" bullet list for the
+dialog's "Details" view. The port's `about_dialog` sets no equivalent
+text anywhere — there is still no `data/*.metainfo.xml.in` (or hand-built
+replacement) to read from. A user who opens the About dialog and clicks
+through to Details sees nothing where upstream shows four feature bullets
+and a two-paragraph description. See `translation-parity.md` Gap A for the
+12 messages this costs.
 
-   — the msgid translators have is the *template* `‘{}’ repository by`. The
-   port (`application.rb:37`) hardcodes the substituted result as the msgid
-   itself:
-
-   ```ruby
-   "‘8mb’ repository by" => [ ... ]
-   ```
-
-   That is a different string. Every language's translation of
-   `‘{}’ repository by` is discarded for this credit, and the English still
-   renders correctly, which is exactly the failure mode `translation-parity`
-   warns reads as fine until someone checks.
-
-2. **Missing content**: upstream builds its About dialog with
-   `Adw.AboutDialog.new_from_appdata(metainfo_path, VERSION)`
-   (`main.py:167-169`), which populates the dialog's `comments` (the one-line
-   app summary shown under the title/version — metainfo's `<summary>`,
-   `Compress videos to target sizes`) and reads the long `<description>`
-   paragraphs for the dialog's "Details" view. The port's `about_dialog`
-   (`application.rb:203-226`) builds `Adwaita::AboutDialog.new` field by field
-   and never sets `comments` or any description text — there is no metainfo
-   file in the port for it to read, at all (see `component-identification.md`
-   row 20/21). The About dialog a user opens in the port is missing its own
-   one-line summary.
-
-**Verdict: gap**, on the text axis for (1) and on presence for (2).
+**Verdict: the two previously-filed gaps are fixed; the deeper gap (no
+Details content at all) remains and was always a subset of "Gap 3"/"Gap
+A" rather than a separate finding.**
 
 ## Unit: desktop launcher entry — `data/*.desktop.in`
 
@@ -109,37 +122,42 @@ target sizes`, `Keywords=Compress;Video;Movie;Film;Clip;`, and the
 expose to the shell's launcher/search, and none of them exist anywhere in the
 port.
 
-## Units not exercised by anything that drives them: `progress_pie.rb`, `progress_popover_box.rb`, `attempt_fail_box.rb`, `drag_overlay.rb`
+## Units previously unexercised, now driven: `progress_pie.rb`, `progress_popover_box.rb`, `attempt_fail_box.rb`, `drag_overlay.rb`
 
-Static reading shows these four files build the right widget trees (see
-`component-identification.md`), and the widget-count axis is clean. But
-`test/drive_constrict.rb` — the only thing in this port that actually runs
-any of it — never instantiates `Constrict::ProgressPie`,
-`Constrict::ProgressPopoverBox`, `Constrict::AttemptFailBox` or
-`Constrict::DragOverlay` by name (grep confirms zero hits across
-`test/*.rb` — re-confirmed this round against the now-188-check suite, same
-zero hits). That is a 188/188 pass that covers roughly 14 of this port's ~18
-component classes and says nothing — not even that the file loads — about
-the other four. The 38 checks added this round exercise `SourcesRow`'s real
-glycin decode path and fix a harness bug (see `test-parity.md`); neither
-touches any of these four files. See `test-parity.md` and
-`accountability-ensurance.md`: this is the "component no check exercises is
-unverified, not done" case the task asked to be treated as a gap in its own
-right, and it is **not reflected anywhere in the drive output's "188 of 188
-/ DRIVE OK" headline**, which is exactly the false-green shape this review
-exists to catch.
+**Fixed this round.** The previous round's report found that
+`test/drive_constrict.rb` never instantiated any of these four classes by
+name. The current `test/drive_constrict.rb` (re-read this session) adds
+four real steps that construct and assert on each one directly:
+`Constrict::ProgressPie.new` (fraction updates, drawing at 0%/partial/full
+all leave the widget realised, screenshotted), `Constrict::AttemptFailBox`
+(overshoot and undershoot cases, label content asserted),
+`Constrict::ProgressPopoverBox` (top-widget assembly, failure tracking,
+announcement string), `Constrict::DragOverlay` (child delegation, drop
+target, hint visibility). Re-run in this session:
+`nix develop --command xvfb-run -a ruby test/drive_constrict.rb` →
+**209 of 209 checks passed, DRIVE OK**, with the four widgets' sections
+([33]–[36]) all `ok`. This closes the specific "component no check
+exercises" gap previously filed here for these four classes.
+
+**What is still not driven, by the harness's own header comment (unchanged
+this round):** an actual successful two-pass compression (`ffmpeg`/
+`ffprobe` absent from this sandbox — confirmed again this session, `which
+ffmpeg ffprobe` finds neither in the Nix dev shell), so `CurrentAttemptBox`'s
+live-progress rendering and the real backend success path have still never
+executed under any check, in this environment, even though their owning
+widget classes are now instantiated synthetically. See `test-parity.md`.
 
 ## Summary
 
 | Unit | Verdict |
 |---|---|
 | Application (actions, accelerators) | parity |
-| Main window (widgets/actions/behaviour) | parity |
-| About dialog content (text) | **gap** — reworded msgid + missing summary/description |
-| Desktop launcher entry | **gap** — no port file at all |
-| Source row | widget/behaviour axis: parity; **text axis: regression this round** — 3 msgids at `sources_row.rb:390,411,558-561` were byte-identical to upstream (`U+202F`) and were rewritten to a plain space in `a69438d`, on the strength of a previous report's wrong claim — see `translation-parity.md`'s corrected Gap 1 and `accountability-ensurance.md`'s top entry |
-| Sources list box | parity (not re-derived in detail here; scan clean) |
+| Main window (widgets/actions/behaviour) | widget/behaviour axes: parity; **text axis: gap (new this round)** — `_Export To…`/`_Cancel…` button labels have no `_()` wrapper |
+| About dialog content (text) | previous round's two gaps (reworded msgid, missing `comments`) **fixed this round**; still missing the Details-view description/feature-bullet text (subset of the metainfo gap) |
+| Desktop launcher entry | **gap** — no port file at all (unchanged) |
+| Source row | widget/behaviour axis: parity; **text axis: regression fixed this round** — the 3 msgids at `sources_row.rb:390,411,558-561` are restored to byte-identical with upstream |
+| Sources list box | parity (scan clean) |
 | Preferences dialog | parity (scan clean) |
 | Error dialog | parity (scan clean) |
 | Shortcuts dialog | parity — table-driven, C_() context verified byte-identical (see translation-parity.md) |
-| Progress pie / progress popover box / attempt-fail box / drag overlay | widget tree present, **unverified** — nothing in the port's own test suite ever builds or drives one |
+| Progress pie / progress popover box / attempt-fail box / drag overlay | widget tree present, **now driven and asserted** by `test/drive_constrict.rb` (209/209, confirmed this round) — the real backend success path (ffmpeg absent from this sandbox) remains the one thing none of these can be driven through |

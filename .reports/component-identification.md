@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `main` @ `ecd8b7d` |
-| Port | `ruby` @ `4ba7d7a` |
+| Port | `ruby` @ `0b4aa2b` (re-verified this round; the unit list and gaps below are unchanged from the `4ba7d7a` version except where `component-parity.md`/`translation-parity.md` note a fix or a new finding) |
 
 This supersedes `.reports/component-inventory.md`'s verdict on rows 21–24. That
 file is kept (history), but its "N/A" / "by design" rows for the metainfo,

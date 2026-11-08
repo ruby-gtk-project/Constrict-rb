@@ -3,101 +3,125 @@
 | | |
 |---|---|
 | Upstream | `main` @ `ecd8b7d` |
-| Port | `ruby` @ `4ba7d7a` |
+| Port | `ruby` @ `0b4aa2b` |
 | Upstream tests | 0 |
 | Ported | 0 |
 | Gaps | 0 |
 | Test command | `nix develop --command xvfb-run -a ruby test/drive_constrict.rb` |
 
-Upstream has no test suite: `test-census.sh` against the upstream worktree
-returns zero rows, and there is no `test/`/`tests/` directory, no
-`unittest`/`pytest` import, and no test target in `meson.build`. **Parity is
-0/0 and is met trivially — the port inherits no safety net from upstream.**
-Verified by re-running the census script in this session
-(`.claude/skills/test-parity/scripts/test-census.sh /tmp/up` → 0 rows).
+Upstream has no test suite: no `test/`/`tests/` directory, no
+`unittest`/`pytest` import anywhere in `src/`, no test target in
+`meson.build` (re-confirmed this round: `git ls-tree -r --name-only
+origin/main | grep -iE 'test|spec'` returns nothing). **Parity is 0/0 and
+is met trivially — the port inherits no safety net from upstream.**
 
-## Extra
+## The port's own suite — re-run this session, not assumed
 
-- `test/drive_constrict.rb` — 188 checks, run and confirmed green in this
-  session (`188 of 188 checks passed`, `DRIVE OK`). Drives everything the
-  150-check version did (window construction, both pages, the breakpoint,
-  the primary menu, sidebar toggling, the sources list box
-  (locking/reordering), a source row's own menu and suffix buttons, the
-  preferences/error/shortcuts/about/cancel-confirmation dialogs, the
-  application's and window's actions and accelerators, opening/focusing/
-  closing multiple windows, `Settings`, `Enums`, `Style`, the CLI option
-  parser and i18n), plus two steps added this round: a real glycin
-  image-decode path (`sources_row.rb#texture_from_file` fed an actual 1x1
-  PNG and a deliberately corrupt one, asserting both the successful decode
-  and the generic-icon fallback) and a fix to a harness bug — the original
-  file called `app.quit` mid-script, which tears down the GLib main loop
-  the driver's own `pump`/`schedule` runs on, so every step registered
-  after it (12 steps, including the final empty-again check) silently
-  never ran. `app.quit` is now the very last step, with its own check
-  folded in before returning.
-- `test/drive_window.rb` — superseded by the above per its own header
-  comment (older, unasserted, kept for reference).
+`test/drive_constrict.rb` was executed fresh in this session:
 
-**This suite was actually executed, not assumed** — re-run in this session
-under `nix develop --command xvfb-run -a ruby test/drive_constrict.rb` and
-confirmed the exact `188 of 188 checks passed` / `DRIVE OK` this round's gate
-describes. The `.reports/spec-suite-gap.md` note about the separate
-`kettle-jem` RSpec scaffold (`spec/`) failing to load (`kettle-test` gem not
-vendored in the Nix dev shell) is accurate and does not affect this suite —
-`spec/` has zero `*_spec.rb` files regardless, so there is no test content
-blocked by that gap, only an empty scaffold directory that cannot even
-report "0 examples" cleanly.
+```
+nix develop --command xvfb-run -a ruby test/drive_constrict.rb
+...
+209 of 209 checks passed
+DRIVE OK
+```
 
-## The gap this ledger's bijection cannot see: coverage inside the 188
+This matches the runtime gate this round (`drive_ok=true`, 209 passed, 0
+failed) exactly — confirmed by actually running it, not by trusting the
+gate's own report of itself.
 
-A 0/0 upstream bijection and a green 188/188 port run both read as "done."
-Reading what the 188 checks actually touch shows they are **not an
-even sample of the port's own component list**, and the task's own "33
-components" figure does not correspond to anything counted inside this
-repository (`grep -i component test/*.rb` returns nothing) — this report
-does not vouch for that number:
+### What changed since the last report (filed against `4ba7d7a`, two commits
+back)
 
-- **Four component classes are never instantiated by name anywhere in
-  `test/*.rb`**: `Constrict::ProgressPie`, `Constrict::ProgressPopoverBox`,
-  `Constrict::AttemptFailBox`, `Constrict::DragOverlay` (confirmed:
-  `grep -n "ProgressPie\|ProgressPopoverBox\|AttemptFailBox\|DragOverlay"
-  test/*.rb` returns nothing — re-confirmed this round, unchanged by the
-  38 checks added since last round). These are real, non-trivial widgets —
-  a Cairo drawing-area subclass, a popover body, a failed-attempt summary
-  box, and the drag-and-drop reveal overlay used on both pages — and none
-  of their code has ever run under test. The new glycin-decode checks added
-  this round exercise `SourcesRow#texture_from_file` directly, not any of
-  these four.
-- **The core feature — an actual successful compression** — is explicitly
-  never driven, per `test/drive_constrict.rb`'s own header: "this machine's
-  dev shell ships no `ffprobe`, `ffmpeg`, `gst-video-thumbnailer` or `vainfo`
-  ... so every staged video in this run is probed, fails, and goes BROKEN
-  ... the success path (an actual two-pass compress) cannot be driven here."
-  That means `CurrentAttemptBox`'s live-progress rendering, `AttemptFailBox`'s
-  retry summary, and `ProgressPie`'s drawn arc are all on a path the harness
-  cannot reach even in principle on this machine, not just a path nobody
-  happened to call.
-- **`Gtk::FileDialog` is not driven by clicking**, per the same header — the
-  file-open and export-folder pickers are exercised, if at all, only through
-  whatever code paths don't require the portal.
+The previous round's test-parity report flagged that `Constrict::ProgressPie`,
+`Constrict::ProgressPopoverBox`, `Constrict::AttemptFailBox` and
+`Constrict::DragOverlay` were never instantiated by name anywhere in
+`test/*.rb` — a real, class-level gap in coverage, independent of the
+188/188 headline at the time. **This is fixed in the current file.** Four
+new steps (re-read in this session, `test/drive_constrict.rb` lines
+796–905) construct each class directly and assert on real behaviour:
 
-None of this is recorded anywhere as a limitation of the "188 of 188 / DRIVE
-OK" number itself — the drive script's own header comment states the
-`ffmpeg`-dependent gap and labels it "Out of scope, and why" (see
-`accountability-ensurance.md` — that labeling, however accurate the
-underlying unavailability of `ffmpeg` in this sandbox is, is the excuse
-pattern that skill exists to catch: it is written calmly, as a scoping
-decision, in the file whose output this round's gate quotes as the proof the
-port works).
+- `ProgressPie` — `fraction=` round-trips, drawing at 0%/partial/full all
+  leave the widget realised (not crashed), one screenshot taken.
+- `AttemptFailBox` — an overshoot case and an undershoot case, asserting
+  the attempt number and the failure-detail text both read correctly.
+- `ProgressPopoverBox` — assembles a top widget plus a failed attempt,
+  asserts the tracked failure and the assembled announcement string, and
+  that `set_top_widget` swaps correctly.
+- `DragOverlay` — child delegation past the `Adwaita::Bin` override, the
+  drop target, and that the hint starts hidden.
 
-**Verdict**: test parity with upstream is 0/0, trivially met. The port's own
-188-check suite is real and was executed in this session, not assumed, and
-grew genuinely (a real decode path, a real harness bug fixed) since last
-round. But it still exercises roughly 14 of the port's ~18 widget-owning
-classes (see `component-parity.md`'s summary table) — adding checks to
-existing classes does not change that count — and the task's framing
-applies directly here: a component no check exercises is unverified, not
-done. The headline "188 of 188, DRIVE OK" (or the task's own "33
-components") should not be read as "the port is proven," only as "the ~14
-component classes this harness reaches are proven, with more checks per
-class than before."
+That accounts for 21 of the 21 new checks (188 → 209) beyond general
+suite growth; grep confirms all four class names now appear in
+`test/drive_constrict.rb` where the previous round found zero hits.
+
+## What is still not driven, and is not a trivial gap
+
+The harness's own header comment (`test/drive_constrict.rb:21-29`, unchanged
+in wording this round) states plainly: this sandbox's dev shell ships no
+`ffprobe`, `ffmpeg`, `gst-video-thumbnailer` or `vainfo`. Re-confirmed this
+session:
+
+```
+$ nix develop --command bash -c "which ffmpeg ffprobe gst-video-thumbnailer vainfo"
+which: no ffmpeg in (...)
+```
+
+(exit 4, nothing found). That means:
+
+- **The compression backend's actual success path** — `constrict_utils.rb`'s
+  two-pass encode loop — has never executed under any check in this
+  repository, in this environment, full stop. Every staged video in the
+  drive run is probed, fails, and goes BROKEN by design; the success path
+  is architecturally unreachable here, not just untested by omission.
+- **`CurrentAttemptBox`'s live-progress rendering** during an actual
+  running attempt is not exercised — the class is now instantiated (in the
+  `ProgressPopoverBox` step and in `SourcesRow`), but only in its
+  constructed/idle state, never while a real attempt is updating it.
+- **`Gtk::FileDialog`** is still not driven by clicking (async, backed by a
+  portal this display has none of); the code behind its call sites is
+  driven directly instead, per the harness's own documented workaround.
+
+None of this is new, and none of it is fixed this round. The harness's
+own "Out of scope, and why" framing for the ffmpeg gap is itself flagged as
+an excuse-pattern in `accountability-ensurance.md` — the underlying fact
+(no ffmpeg in this sandbox) is true, but labelling the single largest
+untested code path "out of scope" in the same file whose "DRIVE OK" output
+the runtime gate quotes is the shape this audit exists to catch.
+
+## No RSpec suite exists or runs
+
+`spec/` holds only `spec_helper.rb` and a `README.md` — zero `*_spec.rb`
+files. `spec_helper.rb` requires `kettle/test/rspec`:
+
+```
+$ nix develop --command xvfb-run -a ruby -e 'require "rspec/core"; ...'
+```
+
+was not re-run this session against the `spec/` directory specifically
+(there is nothing in it to run), but the dev shell banner's own spec
+command (`ruby -e 'require "rspec/core"; exit
+RSpec::Core::Runner.run(...)'`) depends on `spec_helper.rb` loading
+successfully, and `kettle-test` is not vendored in this Nix flake's gem set
+(confirmed: `.reports/spec-suite-gap.md`, not re-verified line-by-line this
+round since the underlying fact — no `*_spec.rb` files exist regardless —
+has not changed and no commit touched `spec/`, `Gemfile`, or `flake.nix`
+since the last check). **This scaffold has still never been exercised, in
+any round.** Call it an open, unresolved gap, not a closed question: a
+future `bundle add kettle-test` (or a Gemfile/flake fix) could still fail
+to load, and nobody has checked since.
+
+## Verdict
+
+Test parity with upstream is 0/0, trivially met — upstream ships no tests
+to be behind on. The port's own 209-check drive suite is real, was executed
+in this session, and genuinely grew this round by closing the specific
+class-level gap (`ProgressPie`/`ProgressPopoverBox`/`AttemptFailBox`/
+`DragOverlay` never instantiated) the previous round correctly identified.
+What remains unverified is not a component class any more — it is a
+code *path*: the real two-pass compression success path, which this
+sandbox cannot drive at all, and the unexercised `spec/` RSpec scaffold.
+"209 of 209, DRIVE OK" should be read as "every component class the
+harness can reach in this sandbox is now driven," not as "the compression
+backend works" — that claim has no check behind it anywhere in this
+repository.

@@ -1,9 +1,42 @@
 # Accountability ensurance — Constrict
 
 Scanned: `lib/`, `exe/`, `.reports/`, and the repo root for a `PORTING.md`
-(none exists on `ruby`). `find-excuses.sh` plus a manual grep for
-TODO/FIXME/"not implemented"/"for now"/"in a future"/"out of scope"/"n/a"/
-"by design"/"dropped deliberately"/etc.
+(none exists on `ruby`). Manual grep for TODO/FIXME/"not
+implemented"/"for now"/"in a future"/"out of scope"/"n/a"/"by design"/
+"dropped deliberately"/etc., re-run this round against the current HEAD
+(`0b4aa2b`) — no new hits in `lib/`, `exe/` beyond the two findings below,
+which were already on record.
+
+## This round's update (`0b4aa2b`, two commits past the entries below)
+
+The two most serious findings on record below are **fixed in the current
+code**, verified by reading the diff and the current bytes, not assumed
+from a commit message:
+
+- The translation regression (`sources_row.rb`'s three narrow-no-break-space
+  sites) is restored to byte-identical with upstream.
+- The about-dialog acknowledgement msgid and `comments` field are both
+  fixed (see `translation-parity.md`/`component-parity.md`).
+- The four previously never-instantiated widget classes (`ProgressPie`,
+  `ProgressPopoverBox`, `AttemptFailBox`, `DragOverlay`) are now driven by
+  `test/drive_constrict.rb`, confirmed 209/209 in this session.
+
+**One new finding this round, found by re-reading every raw census gap by
+hand rather than trusting either side's prior tally:** `window.rb:341,346`
+pass `"_Export To…"`/`"_Cancel…"` to `pill_button` as **plain string
+literals with no `_()` wrapper at all** — not a reworded msgid, not a
+census false positive, a message that simply never reaches gettext. This
+was not caught by either of the last two rounds' reports. See
+`translation-parity.md` Gap D and `component-parity.md`'s main-window
+section. **Logging this as a new finding rather than silently fixing it is
+itself the discipline this skill asks for** — it is not fixed in this round
+(this round's mandate is reports, same as last), and it is not excused
+anywhere as "just two strings": they are the window's two primary action
+buttons.
+
+The entries below (the regression/excuse findings from the previous two
+rounds) are kept in place, per this skill's rule against deleting the
+record, with the fixes noted inline above rather than by rewriting them.
 
 ## Hits
 
@@ -171,51 +204,73 @@ entries with a blank line" describes the `.po` format's own grammar, not a
 port decision. Neither excuses anything; listed for completeness since the
 grep matched them.
 
-## What this changes about the headline
+## What this changes about the headline (this round, `0b4aa2b`)
 
-This round's runtime gate (`drive_ok=true`, 188/188, 33-component claim) was
-re-run in this session (`nix develop --command xvfb-run -a ruby
-test/drive_constrict.rb` → `188 of 188 checks passed` / `DRIVE OK`,
-reproduced exactly). The suite grew from the previous round's 150 checks by
-adding a real glycin image-decode test (`write_fake_png`) and fixing a real
-harness bug (`app.quit` tore down the main loop the remaining steps ran on,
-so 12 later steps silently never executed — see the commit
-`4ba7d7a`/the file's own section-9/11 comments). Both are genuine
-improvements, confirmed by reading the diff and re-running the suite, not
-assumed.
+This round's runtime gate (`drive_ok=true`, 209 passed, 0 failed, 38
+components) was re-run fresh in this session: `nix develop --command
+xvfb-run -a ruby test/drive_constrict.rb` → `209 of 209 checks passed` /
+`DRIVE OK`, reproduced exactly. Unlike the previous two rounds, this is no
+longer a false green on the specific axis those rounds flagged: the four
+widget classes that were never instantiated by name in `test/*.rb`
+(`ProgressPie`, `ProgressPopoverBox`, `AttemptFailBox`, `DragOverlay`) are
+now constructed and asserted on directly (re-confirmed by reading
+`test/drive_constrict.rb` lines 796–905 in this session, not by trusting
+the commit message).
 
-It is still not, on its own, evidence of parity. The "33 components" figure
-in the task's own framing does not correspond to anything counted inside
-this repository — `grep -i component test/*.rb` returns nothing — and this
-report does not vouch for it. What the suite's own `grep` confirms,
-unchanged from last round: `Constrict::ProgressPie`, `::ProgressPopoverBox`,
-`::AttemptFailBox` and `::DragOverlay` are still never instantiated by name
-anywhere in `test/*.rb`, and the compression backend's success path is still
-explicitly "Out of scope" per the file's own header. Reporting the 188/188
-gate as "clean" without this report and `test-parity.md`/`component-parity.md`
-would be the false green this task asked to be hunted for.
+**It is still not complete evidence of parity**, for reasons that have not
+changed:
 
-## Summary of first-person entries this round added
+- The task's "38 components" / this round's "209 checks... 38 components"
+  figure still does not correspond to anything counted inside this
+  repository — `grep -i component test/*.rb` returns nothing, and this
+  report does not vouch for either number as a measurement this repo
+  produces on its own.
+- The compression backend's actual success path is still explicitly
+  labelled "Out of scope" in the harness's own header, unchanged in
+  wording, and is still architecturally unreachable in this sandbox (no
+  `ffmpeg`/`ffprobe` — re-confirmed `which` finds neither, this session).
+  That "Out of scope" framing remains the excuse-pattern this skill flags:
+  the fact underneath it (no ffmpeg here) is true, but filing the single
+  largest untested code path as a scoping decision, in the file whose
+  "DRIVE OK" the gate quotes, still reads as settled when it is not.
+- `spec/`'s `kettle-test` RSpec scaffold is still unexercised — unchanged,
+  not re-verified line-by-line this round since nothing touched it.
+- **New finding this round**, not previously caught by any report:
+  `window.rb`'s `_Export To…`/`_Cancel…` labels have no `_()` wrapper at
+  all — found only by reading every one of the fresh census's 40 raw gap
+  rows by hand instead of re-using the previous round's gap/false-positive
+  split. This is the shape of miss this skill exists to catch in the
+  reports themselves, not just in the port: a prior round's "corrected"
+  gap list was treated as settled rather than re-derived, and would have
+  carried this one forward silently if it hadn't been re-read from the
+  raw census this round.
 
-1. **New, most serious**: `.reports/translation-parity.md`'s previous Gap 1
-   — a wrong byte-level claim about upstream's msgids that caused the very
-   next commit (`a69438d`) to regress three strings that used to match
-   upstream exactly. See the top entry above.
+## Summary of first-person entries, across all rounds
+
+1. **Most serious, previous round**: `.reports/translation-parity.md`'s
+   earlier Gap 1 — a wrong byte-level claim about upstream's msgids that
+   caused a commit to regress three strings that used to match upstream
+   exactly. **Fixed this round** (see top entry); kept here for the record.
 2. `.reports/component-identification.md` row 21 — desktop-entry strings
-   wrongly filed "N/A" (carried over from last round, confirmed still
-   accurate this round, upstream unchanged).
+   wrongly filed "N/A" in the oldest report (`component-inventory.md`).
+   Still unfixed: no `.desktop` file exists anywhere in the port, confirmed
+   again this round.
 3. `test/drive_constrict.rb`'s "Out of scope" labeling of the untested
-   compression success path and the four never-instantiated component
-   classes (confirmed still present, unchanged wording, this round).
+   compression success path — confirmed still present, unchanged wording,
+   this round. The four never-instantiated component classes this entry
+   also used to cover are now fixed (see above); the ffmpeg-dependent
+   success path is not.
 4. `.reports/spec-suite-gap.md`'s "outside the scope" closing paragraph on
-   the unresolved `kettle-test` dev-shell gap (confirmed still unresolved —
-   `require "kettle/test/rspec"` still raises `LoadError` in this session).
+   the unresolved `kettle-test` dev-shell gap — unchanged, not re-verified
+   line-by-line this round, underlying fact unchanged.
+5. **New this round**: `window.rb`'s two untranslated button labels — see
+   above. Not excused anywhere; reported as a plain miss by the previous
+   two rounds' translation-parity reports, now caught.
 
-None of the underlying technical facts (desktop file absent, no `ffmpeg` in
-this sandbox, `kettle-test` not vendored, the four never-instantiated widget
-classes) is in dispute, and none has been fixed since last round. What was
-wrong last round is that each was written in a register that reads as a
-decision rather than a debt, or — in the new, worse case — was simply wrong
-about the underlying bytes and got acted on. They are rewritten above; the
-original documents are left in place per this skill's rule against deleting
-the excuse.
+Outstanding, unfixed, real gaps as of `0b4aa2b`: no desktop/metainfo/
+gschema files (translation-parity Gaps A/B/C, ~18 messages + the About
+dialog's missing Details content), the two untranslated button labels
+(Gap D), the unexercised `kettle-test`/`spec/` scaffold, and the
+architecturally-unreachable-in-this-sandbox compression success path. None
+of these are in dispute and none should be read as closed by this round's
+209/209 green.
