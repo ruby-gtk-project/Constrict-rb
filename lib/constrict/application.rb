@@ -34,7 +34,7 @@ module Constrict
     # they credit is in this port too. The titles are msgids, translated as
     # the dialog is built.
     ACKNOWLEDGEMENTS = {
-      "‘8mb’ repository by"                   => [
+      "‘{}’ repository by"                    => [
         "Matthew Baggett https://github.com/matthewbaggett/",
         "Ethan Martin https://github.com/yuckdevchan",
       ],
@@ -205,6 +205,12 @@ module Constrict
           dialog.application_name = _("Constrict")
           dialog.application_icon = "video-encoder-symbolic"
           dialog.version = VERSION
+          # Upstream's About dialog reads this from the one-line <summary> in
+          # data/io.github.wartybix.Constrict.metainfo.xml.in, which libadwaita
+          # shows as the dialog's description under the app name. There is no
+          # metainfo file here for an AboutDialog to read, so the same msgid is
+          # carried in directly.
+          dialog.comments = _("Compress videos to target sizes")
           dialog.developer_name = "Wartybix"
           dialog.copyright = "© 2025 Wartybix"
           dialog.license_type = Gtk::License::GPL_3_0
@@ -213,7 +219,7 @@ module Constrict
           dialog.issue_url = "https://github.com/ruby-gtk-project/Constrict-rb/issues"
 
           ACKNOWLEDGEMENTS.each do |title, names|
-            dialog.add_acknowledgement_section(_(title), names)
+            dialog.add_acknowledgement_section(interpolate(_(title), "8mb"), names)
           end
 
           # Upstream passes _('translator-credits') straight in. gettext hands

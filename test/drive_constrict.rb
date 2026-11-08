@@ -513,6 +513,9 @@ GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.Constrict
       pump(300)
       d.check("the application name is Constrict") { dialog.application_name == "Constrict" }
       d.check("its icon is the port's own") { dialog.application_icon == "video-encoder-symbolic" }
+      d.check("the one-line app summary is set as the dialog's comments") do
+        dialog.comments == "Compress videos to target sizes"
+      end
       d.check("the version is upstream's") { dialog.version == Constrict::Application::VERSION }
       d.check("the developer name matches") { dialog.developer_name == "Wartybix" }
       d.check("the copyright matches") { dialog.copyright == "© 2025 Wartybix" }
@@ -788,6 +791,128 @@ GtkDriver.drive(Constrict::Application.new(app_id: "org.rubygtkproject.Constrict
     ENV.delete("LANGUAGE")
     Constrict::I18n.instance_variable_set(:@catalog, nil)
     d.check("English comes back once the environment does") { Constrict::I18n._("Preferences") == "Preferences" }
+  end
+
+  # --- 10b. Widgets with no other coverage: ProgressPie, ProgressPopoverBox,
+  # AttemptFailBox, DragOverlay (progress_pie.rb, progress_popover_box.rb,
+  # attempt_fail_box.rb, drag_overlay.rb) --------------------------------------
+
+  d.step("ProgressPie draws its arc without a running attempt driving it") do
+    Constrict::ProgressPie.new.then do |pie|
+      d.check("starts at zero progress") { pie.fraction == 0.0 }
+      d.check("it is a real Gtk::DrawingArea") { pie.is_a?(Gtk::DrawingArea) }
+      pie.content_width = 24
+      pie.content_height = 24
+
+      realize(pie).then do |window|
+        pump(200)
+        d.check("drawing at 0% leaves the pie realised, not crashed") { pie.realized? }
+
+        pie.fraction = 0.5
+        pump(200)
+        d.check("fraction= stores the new value") { pie.fraction == 0.5 }
+        d.check("drawing a partial wedge leaves the pie realised, not crashed") { pie.realized? }
+
+        pie.fraction = 1.0
+        pump(200)
+        d.check("drawing a full circle (no closing seam) leaves it realised") { pie.realized? }
+
+        d.shot("10-progress-pie", pie)
+        window.close
+      end
+    end
+  end
+
+  d.step("AttemptFailBox reports an overshoot and an undershoot correctly") do
+    Constrict::AttemptFailBox.new(
+      attempt_no:             1,
+      vid_bitrate:            2_000_000,
+      is_hq_audio:            true,
+      vid_height:             1080,
+      vid_fps:                30.0,
+      compressed_size_bytes:  12 * 1024 * 1024,
+      target_size_bytes:      10 * 1024 * 1024,
+    ).then do |over_box|
+      d.check("it is a real Gtk::Box") { over_box.is_a?(Gtk::Box) }
+      d.check("an attempt that came out too large points up") do
+        over_box.failure_icon.icon_name == "arrow2-up-symbolic"
+      end
+      d.check("the attempt label names the attempt number") do
+        over_box.attempt_label.text == "Attempt 1"
+      end
+      d.check("the failure detail mentions the size it actually came out to") do
+        over_box.failure_details_label.text.include?("12.0")
+      end
+    end
+
+    Constrict::AttemptFailBox.new(
+      attempt_no:             2,
+      vid_bitrate:            2_000_000,
+      is_hq_audio:            false,
+      vid_height:             720,
+      vid_fps:                30.0,
+      compressed_size_bytes:  5 * 1024 * 1024,
+      target_size_bytes:      10 * 1024 * 1024,
+    ).then do |under_box|
+      d.check("an attempt that came out too small points down") do
+        under_box.failure_icon.icon_name == "arrow2-down-symbolic"
+      end
+
+      realize(under_box).then do |window|
+        d.shot("11-attempt-fail-box", under_box)
+        window.close
+      end
+    end
+  end
+
+  d.step("ProgressPopoverBox assembles a top widget and failed attempts into one announcement") do
+    Constrict::CurrentAttemptBox.new.then do |top|
+      Constrict::ProgressPopoverBox.new(top).then do |popover_box|
+        d.check("it is a real Gtk::Box, vertical") { popover_box.is_a?(Gtk::Box) }
+        d.check("starts with the given top widget and no failures") do
+          popover_box.top_widget == top && popover_box.fail_widgets.empty?
+        end
+
+        fail_widget = Constrict::AttemptFailBox.new(
+          attempt_no:             1,
+          vid_bitrate:            2_000_000,
+          is_hq_audio:            true,
+          vid_height:             1080,
+          vid_fps:                30.0,
+          compressed_size_bytes:  12 * 1024 * 1024,
+          target_size_bytes:      10 * 1024 * 1024,
+        )
+        popover_box.add_fail_widget(fail_widget, false)
+        d.check("the failed attempt is tracked") { popover_box.fail_widgets == [fail_widget] }
+        d.check("the announcement string strings every label together") do
+          popover_box.message.include?("Attempt 1") && popover_box.message.include?("...")
+        end
+
+        new_top = Constrict::CurrentAttemptBox.new
+        popover_box.set_top_widget(new_top, false)
+        d.check("set_top_widget swaps in the new widget") { popover_box.top_widget == new_top }
+      end
+    end
+  end
+
+  d.step("DragOverlay reveals its drop hint only while a drag is hovering") do
+    Constrict::DragOverlay.new.then do |overlay|
+      d.check("it is a real Adwaita::Bin") { overlay.is_a?(Adwaita::Bin) }
+
+      content = Gtk::Label.new("under the overlay")
+      overlay.child = content
+      d.check("child= reaches past the override onto the inner Gtk::Overlay") { overlay.child == content }
+
+      target = Gtk::DropTarget.new(Gdk::FileList.gtype, :copy)
+      overlay.drop_target = target
+      d.check("drop_target is readable back") { overlay.drop_target == target }
+      d.check("the hint starts hidden") { overlay.revealer.reveal_child? == false }
+
+      realize(overlay).then do |window|
+        d.shot("12-drag-overlay", overlay)
+        window.close
+      end
+    end
   end
 
   # --- 11. app.quit, driven last because it ends the loop this driver runs on
