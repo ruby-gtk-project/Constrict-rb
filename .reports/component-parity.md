@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Upstream | `main` @ `ecd8b7d` |
-| Port | `ruby` @ `6652308` |
-| Units with full parity | 10 / 16 widget units (see below); 2 app-level units carry confirmed gaps |
+| Port | `ruby` @ `4ba7d7a` |
+| Units with full parity | 9 / 16 widget units (see below); 2 app-level units carry confirmed gaps; source row carries a new text-axis regression introduced this round (widget/behaviour axis still parity) |
 
 ## Method
 
@@ -31,10 +31,14 @@ The raw scan shows apparent gaps of 2 `Adw.ActionRow`, 1 `Adw.AlertDialog`, 1
 Driven: the drive harness (`test/drive_constrict.rb`) exercises the
 breakpoint collapse/expand, the sidebar toggle, the cancel-confirmation
 dialog (named video + choosing "stop"), the primary menu, and the window
-actions/accelerators — all `ok` in a 150/150 run. **Not driven**: the three
-FPS/help popovers' own `show` announcement (`help_popover`, window.rb:779-786)
-and the three preference rows under "Advanced Options"/"Encoding Options"
-beyond their mere existence. Minor, noted for completeness.
+actions/accelerators — all `ok` in a 188/188 run (150/150 at the time this
+section was first written; the suite grew by 38 checks this round — a real
+glycin image-decode test on `SourcesRow` and a harness-bug fix, see
+`test-parity.md` — neither of which touches this unit). **Not driven**: the
+three FPS/help popovers' own `show` announcement (`help_popover`,
+window.rb:779-786) and the three preference rows under "Advanced
+Options"/"Encoding Options" beyond their mere existence. Minor, noted for
+completeness.
 
 **Verdict: parity**, once the scan's factory/false-positive noise is read
 through. This unit does not deserve the raw scan's apparent 10-widget gap.
@@ -113,13 +117,17 @@ Static reading shows these four files build the right widget trees (see
 any of it — never instantiates `Constrict::ProgressPie`,
 `Constrict::ProgressPopoverBox`, `Constrict::AttemptFailBox` or
 `Constrict::DragOverlay` by name (grep confirms zero hits across
-`test/*.rb`). That is a 150/150 pass that covers 14 of this port's ~18
+`test/*.rb` — re-confirmed this round against the now-188-check suite, same
+zero hits). That is a 188/188 pass that covers roughly 14 of this port's ~18
 component classes and says nothing — not even that the file loads — about
-the other four. See `test-parity.md` and `accountability-ensurance.md`: this
-is the "component no check exercises is unverified, not done" case the task
-asked to be treated as a gap in its own right, and it is **not reflected
-anywhere in the drive output's "150 of 150 / DRIVE OK" headline**, which is
-exactly the false-green shape this review exists to catch.
+the other four. The 38 checks added this round exercise `SourcesRow`'s real
+glycin decode path and fix a harness bug (see `test-parity.md`); neither
+touches any of these four files. See `test-parity.md` and
+`accountability-ensurance.md`: this is the "component no check exercises is
+unverified, not done" case the task asked to be treated as a gap in its own
+right, and it is **not reflected anywhere in the drive output's "188 of 188
+/ DRIVE OK" headline**, which is exactly the false-green shape this review
+exists to catch.
 
 ## Summary
 
@@ -129,7 +137,7 @@ exactly the false-green shape this review exists to catch.
 | Main window (widgets/actions/behaviour) | parity |
 | About dialog content (text) | **gap** — reworded msgid + missing summary/description |
 | Desktop launcher entry | **gap** — no port file at all |
-| Source row | parity |
+| Source row | widget/behaviour axis: parity; **text axis: regression this round** — 3 msgids at `sources_row.rb:390,411,558-561` were byte-identical to upstream (`U+202F`) and were rewritten to a plain space in `a69438d`, on the strength of a previous report's wrong claim — see `translation-parity.md`'s corrected Gap 1 and `accountability-ensurance.md`'s top entry |
 | Sources list box | parity (not re-derived in detail here; scan clean) |
 | Preferences dialog | parity (scan clean) |
 | Error dialog | parity (scan clean) |

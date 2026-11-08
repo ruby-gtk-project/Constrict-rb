@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `main` @ `ecd8b7d` |
-| Port | `ruby` @ `6652308` |
+| Port | `ruby` @ `4ba7d7a` |
 
 This supersedes `.reports/component-inventory.md`'s verdict on rows 21–24. That
 file is kept (history), but its "N/A" / "by design" rows for the metainfo,

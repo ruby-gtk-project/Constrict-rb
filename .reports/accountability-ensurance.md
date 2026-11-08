@@ -7,6 +7,54 @@ TODO/FIXME/"not implemented"/"for now"/"in a future"/"out of scope"/"n/a"/
 
 ## Hits
 
+### `.reports/translation-parity.md`'s own previous Gap 1 — a wrong report that caused a real code regression
+
+The most serious finding this round. Last round's `translation-parity.md`
+stated as settled fact: "upstream's msgid has a plain ASCII space" where the
+port used ` ` (narrow no-break space), across 11 messages, and
+recommended "the fix is to use the same character upstream used." That
+claim was never checked against upstream's raw bytes — it was read off a
+terminal, where `U+202F` and a plain space are visually indistinguishable.
+Checked byte-for-byte in this round: upstream's `.py` source embeds the real
+`U+202F` character in all 11 cases (`e2 80 af`, confirmed by hex-dumping
+`src/sources_row.py`, `src/attempt_fail_box.py`, `src/current_attempt_box.py`,
+`src/window.py` at every flagged line). The port's ` ` Ruby *escape
+sequence* evaluates to the identical codepoint at runtime (`ruby -e 'puts
+"{size} {unit}".unpack1("H*")'` → `e2 80 af`). Every one of the 11
+strings was **already byte-identical to upstream**; the census tool's
+text-extraction script is simply blind to Ruby string escapes and flagged a
+false positive on all 11.
+
+The commit immediately following that report, `a69438d` ("Fix glycin
+wiring..."), bundled in a "fix" for three of those 11 call sites in
+`lib/constrict/sources_row.rb` (lines 390, 411, 558/561), replacing the
+correct ` ` escape with a literal plain space — on the strength of the
+wrong report, without re-running the census or diffing rendered bytes
+against upstream. **That commit broke three strings that used to match
+upstream exactly.** This is the clearest version of the failure this skill
+exists to catch, run in reverse: not an excuse that let a pre-existing gap
+survive, but a false "gap" in a report that got acted on and created a real
+one. See `.reports/translation-parity.md`'s corrected Gap 1 for the full
+byte-level accounting and the reconciled totals (27 real gaps, not last
+round's 35; 3 of the 27 are this round's own regression).
+
+**Corrected, in first person, per this skill's rule:**
+
+> I wrote "upstream's msgid has a plain ASCII space" after reading two
+> visually-identical Unicode space characters in a terminal instead of
+> comparing raw bytes, and the next commit trusted my sentence enough to
+> "fix" three strings that were already correct — breaking them. I am an
+> idiot who filed a verdict on Unicode bytes without hex-dumping either
+> side, and the agent after me is an idiot who applied a code change on my
+> word without re-running the one script that would have caught it.
+> Upstream: `src/sources_row.py:505,533,553` — `U+202F` in all three,
+> confirmed by reading raw bytes this round.
+> Port: `lib/constrict/sources_row.rb:390,411,558-561` — plain `U+0020`
+> after `a69438d`, confirmed by reading raw bytes this round. Not fixed in
+> this round (this round's mandate was reports, not code) — flagged here and
+> in `translation-parity.md` so the next agent fixes the regression instead
+> of trusting either report's numbers without checking.
+
 ### `.reports/component-inventory.md` (pre-existing report, this round's own fleet)
 
 ```
@@ -40,7 +88,7 @@ excused one.
 > `Keywords=Compress;Video;Movie;Film;Clip;`, a `New Window` desktop action.
 > Port: no `.desktop`/`.service` file exists anywhere in the tree.
 
-### `test/drive_constrict.rb:21-29` — "Out of scope, and why"
+### `test/drive_constrict.rb:21-29` — "Out of scope, and why" (confirmed still present this round, unchanged in wording)
 
 ```ruby
 # Out of scope, and why: this machine's dev shell ships no `ffprobe`,
@@ -125,26 +173,49 @@ grep matched them.
 
 ## What this changes about the headline
 
-The task's runtime gate (`drive_ok=true`, 150/150, 14 components) is real —
-it was re-run in this session and reproduced exactly. It is not, on its own,
-evidence that the port has parity: it is a true statement about 14 of this
-port's ~18 component classes, running a path that by the harness's own
-header comment excludes the backend's success case. Reporting that gate as
-"clean" without the three write-ups above would be the false green this task
-asked to be hunted for.
+This round's runtime gate (`drive_ok=true`, 188/188, 33-component claim) was
+re-run in this session (`nix develop --command xvfb-run -a ruby
+test/drive_constrict.rb` → `188 of 188 checks passed` / `DRIVE OK`,
+reproduced exactly). The suite grew from the previous round's 150 checks by
+adding a real glycin image-decode test (`write_fake_png`) and fixing a real
+harness bug (`app.quit` tore down the main loop the remaining steps ran on,
+so 12 later steps silently never executed — see the commit
+`4ba7d7a`/the file's own section-9/11 comments). Both are genuine
+improvements, confirmed by reading the diff and re-running the suite, not
+assumed.
+
+It is still not, on its own, evidence of parity. The "33 components" figure
+in the task's own framing does not correspond to anything counted inside
+this repository — `grep -i component test/*.rb` returns nothing — and this
+report does not vouch for it. What the suite's own `grep` confirms,
+unchanged from last round: `Constrict::ProgressPie`, `::ProgressPopoverBox`,
+`::AttemptFailBox` and `::DragOverlay` are still never instantiated by name
+anywhere in `test/*.rb`, and the compression backend's success path is still
+explicitly "Out of scope" per the file's own header. Reporting the 188/188
+gate as "clean" without this report and `test-parity.md`/`component-parity.md`
+would be the false green this task asked to be hunted for.
 
 ## Summary of first-person entries this round added
 
-1. `.reports/component-identification.md` row 21 — desktop-entry strings
-   wrongly filed "N/A".
-2. `test/drive_constrict.rb`'s "Out of scope" labeling of the untested
+1. **New, most serious**: `.reports/translation-parity.md`'s previous Gap 1
+   — a wrong byte-level claim about upstream's msgids that caused the very
+   next commit (`a69438d`) to regress three strings that used to match
+   upstream exactly. See the top entry above.
+2. `.reports/component-identification.md` row 21 — desktop-entry strings
+   wrongly filed "N/A" (carried over from last round, confirmed still
+   accurate this round, upstream unchanged).
+3. `test/drive_constrict.rb`'s "Out of scope" labeling of the untested
    compression success path and the four never-instantiated component
-   classes.
-3. `.reports/spec-suite-gap.md`'s "outside the scope" closing paragraph on
-   the unresolved `kettle-test` dev-shell gap.
+   classes (confirmed still present, unchanged wording, this round).
+4. `.reports/spec-suite-gap.md`'s "outside the scope" closing paragraph on
+   the unresolved `kettle-test` dev-shell gap (confirmed still unresolved —
+   `require "kettle/test/rspec"` still raises `LoadError` in this session).
 
-None of the three underlying technical facts (desktop file absent, no
-`ffmpeg` in this sandbox, `kettle-test` not vendored) is in dispute. What is
-wrong is that each was written in a register that reads as a decision
-rather than a debt. They are rewritten above; the original documents are
-left in place per this skill's rule against deleting the excuse.
+None of the underlying technical facts (desktop file absent, no `ffmpeg` in
+this sandbox, `kettle-test` not vendored, the four never-instantiated widget
+classes) is in dispute, and none has been fixed since last round. What was
+wrong last round is that each was written in a register that reads as a
+decision rather than a debt, or — in the new, worse case — was simply wrong
+about the underlying bytes and got acted on. They are rewritten above; the
+original documents are left in place per this skill's rule against deleting
+the excuse.
